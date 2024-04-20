@@ -19,9 +19,7 @@ class regelungs_node(Node):
         self.vel_sub = self.create_subscription(Float64, 'velocity', self.velocity_callback, 10)
 
 
-        self.robot_command = self.create_publisher(RobotCmd, 'robot_arm_commands', 10)
-
-       
+        self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_arm_commands', 10)
 
         
         self.robot_pos = {'x': None, 'y': None, 'z': None}
@@ -34,7 +32,11 @@ class regelungs_node(Node):
         self.safe_pos = [1, 2, 2]
         self.pick_up_z = 1
         self.transport_z = 2
-        
+        self.target_z = None
+        differenz_x = None
+        differenz_y = None
+        differenz_z = None
+
 
 
     def arm_position_callback(self, msg):
@@ -72,6 +74,7 @@ class regelungs_node(Node):
             target_x = self.object_pos['x'] + self.velocity * (time.time() - object_timestamp)
             target_y = self.object_pos['y'] 
             target_z = pick_up_z
+            self.regler(target_x, target_y, target_z)
         
         if target_z is not None:
             self.get_logger().info('Target position: (%f, %f, %f)' % (target_x, target_y, target_z))
@@ -80,14 +83,16 @@ class regelungs_node(Node):
 
         if(self.robot_pos['x'] == target_x and self.robot_pos['y'] == target_y):
             target_z = self.pick_up_z
+            self.regler(target_x, target_y, target_z)
             robot_cmd = RobotCmd()
             robot_cmd.activate_gripper = True
+            self.robot_command_pub.publish(robot_cmd)
 
         if(self.robot_pos['z'] == target_z):
             self.sort()
 
     def sort(self, object_class, box_unicorn, box_cat, transport_z):
-        target_z = transport_z
+        self.target_z = transport_z
         if(object_class == 'cat'):
             target_x = box_cat[0]
             target_y = box_cat[1]
@@ -95,16 +100,30 @@ class regelungs_node(Node):
         elif(object_class == 'unicorn'):
             target_x = box_unicorn[0]
             target_y = box_unicorn[1]
-        
+
+        self.regler(target_x, target_y, self.target_z)
+
         if(self.robot_pos['x'] == target_x and self.robot_pos['y'] == target_y):
             robot_cmd = RobotCmd()
             robot_cmd.activate_gripper = False
+            self.robot_command_pub.publish(robot_cmd)
 
         target_x = self.default_pos[0]
         target_y = self.default_pos[1]
-        target_z = self.default_pos[2]
+        self.target_z = self.default_pos[2]
 
-            
+        self.regler(target_x, target_y, self.target_z)
+
+    def regler(self, target_x, target_y, target_z):
+        differenz_x = target_x - self.robot_pos['x']    
+        differenz_y = target_y - self.robot_pos['y']  
+        differenz_z = target_z - self.robot_pos['z']     
+
+        robot_cmd = RobotCmd()
+        robot_cmd.vel_x = differenz_x 
+        robot_cmd.vel_y = differenz_y
+        robot_cmd.vel_z = differenz_z 
+        self.robot_command_pub.publish(robot_cmd)
 
 
 
@@ -115,5 +134,5 @@ def main(args=None):
     rclpy.spin(node)
     rclpy.shutdown()
 
-if __name__ == '_main_':
+if __name__ == '__main__':
     main()
