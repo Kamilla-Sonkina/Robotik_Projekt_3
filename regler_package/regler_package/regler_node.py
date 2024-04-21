@@ -26,16 +26,14 @@ class regelungs_node(Node):
         self.object_pos = {'x': None, 'y': None}
         self.velocity = None
         self.object_class = None
-        self.box_unicorn = [1, 2]
-        self.box_cat = [1, 2]
-        self.default_pos = [1, 2, 2]
-        self.safe_pos = [1, 2, 2]
-        self.pick_up_z = 1
-        self.transport_z = 2
-        self.target_z = None
-        differenz_x = None
-        differenz_y = None
-        differenz_z = None
+        self.box_unicorn =  {'x': 1, 'y': 2, 'z': 3}
+        self.box_cat =  {'x': 4, 'y': 5, 'z': 6}
+        self.default_pos =  {'x': 7, 'y': 8, 'z': 9}
+        self.safe_pos =  {'x': 10, 'y': 11, 'z': 12}
+        self.pick_up_z = 13
+        self.gripper_is_activated = False
+        self.target_position = {'x': None, 'y': None, 'z': None}
+        
 
 
 
@@ -43,81 +41,80 @@ class regelungs_node(Node):
         self.robot_pos['x'] = msg.pos_x
         self.robot_pos['y'] = msg.pos_y
         self.robot_pos['z'] = msg.pos_z
-        self.calculate_target_position()
+        self.regler()
 
     def object_position_x_callback(self, msg):
         self.object_pos['x'] = msg.data
-        self.calculate_target_position()
-
+       
     def object_position_y_callback(self, msg):
         self.object_pos['y'] = msg.data
-        self.calculate_target_position()    
+          
 
     def velocity_callback(self, msg):
         self.velocity = msg.data
-        self.calculate_target_position()
+        
 
     def object_class_callback(self, msg):
-        self.object_class = msg.object_class
+        self.object_class = msg.data
         self.calculate_target_position()
+        self.go_to_target_position
     
     def timestamp_object_callback(self, msg):
-        self.timestamp_object = msg.timestamp_object
+        self.timestamp_object = msg.data
         
 
-    def calculate_pick_up_position(self, object_timestamp, pick_up_z):
-        target_x = None
-        target_y = None
-        target_z = None
+    def calculate_target_position(self, object_class, object_pos, timestamp_object):
         
-        if all(self.robot_pos.values()) and all(self.object_pos.values()) and self.velocity is not None and self.object_class:
-            target_x = self.object_pos['x'] + self.velocity * (time.time() - object_timestamp)
-            target_y = self.object_pos['y'] 
-            target_z = pick_up_z
-            self.regler(target_x, target_y, target_z)
+        if(self.gripper_is_activated is True):
+            if(object_class == 'cat'):
+                self.target_position = self.box_cat
+            elif(object_class == 'unicorn'):
+                self.target_position = self.box_unicorn
+            else:
+                self.target_position = self.default_pos
         
-        if target_z is not None:
-            self.get_logger().info('Target position: (%f, %f, %f)' % (target_x, target_y, target_z))
+        if((object_class and object_pos and timestamp_object) is not None):
+            self.target_position['x'] = object_pos['x'] + self.velocity * (time.time() - timestamp_object)
+            self.target_position['y'] = object_pos['y']
+            self.target_position['z'] = self.pick_up_z
+
+
+        else: 
+            self.target_position = self.default_pos
+        
+        return self.target_position
+       
+
+    def go_to_target_position(self, object_class):
+       
+        while(self.target_position is not self.robot_pos):
+            self.wait(0.1)
+
+        if(self.target_position == self.box_cat or self.target_position == self.box_unicorn):
+            self.robot_command_pub.activate_gripper = False
+            self.gripper_is_activated = False
+            self.go_to_target_position(self.default_pos)
         else:
-            self.get_logger().warn('Unable to calculate target_z position.')
+            self.robot_pos.activate_gripper = True
+            self.gripper_is_activated = True
+            self.sort(object_class)
+       
+    def sort(self, object_class):
+        if(self.gripper_is_activated):
+            if(object_class == 'cat'):
+                self.go_to_target_position(self.box_cat)
+                self.robot_command_pub.activate_gripper = False
+                self.gripper_is_activated = False
+            if(object_class ==  'unicorn'):
+                self.go_to_target_position(self.box_unicorn)  
+                self.robot_command_pub.activate_gripper = False
+                self.gripper_is_activated = False  
 
-        if(self.robot_pos['x'] == target_x and self.robot_pos['y'] == target_y):
-            target_z = self.pick_up_z
-            self.regler(target_x, target_y, target_z)
-            robot_cmd = RobotCmd()
-            robot_cmd.activate_gripper = True
-            self.robot_command_pub.publish(robot_cmd)
-
-        if(self.robot_pos['z'] == target_z):
-            self.sort()
-
-    def sort(self, object_class, box_unicorn, box_cat, transport_z):
-        self.target_z = transport_z
-        if(object_class == 'cat'):
-            target_x = box_cat[0]
-            target_y = box_cat[1]
-
-        elif(object_class == 'unicorn'):
-            target_x = box_unicorn[0]
-            target_y = box_unicorn[1]
-
-        self.regler(target_x, target_y, self.target_z)
-
-        if(self.robot_pos['x'] == target_x and self.robot_pos['y'] == target_y):
-            robot_cmd = RobotCmd()
-            robot_cmd.activate_gripper = False
-            self.robot_command_pub.publish(robot_cmd)
-
-        target_x = self.default_pos[0]
-        target_y = self.default_pos[1]
-        self.target_z = self.default_pos[2]
-
-        self.regler(target_x, target_y, self.target_z)
-
-    def regler(self, target_x, target_y, target_z):
-        differenz_x = target_x - self.robot_pos['x']    
-        differenz_y = target_y - self.robot_pos['y']  
-        differenz_z = target_z - self.robot_pos['z']     
+    def regler(self):
+        #Platzhalter
+        differenz_x = self.target_position['x'] - self.robot_pos['x']    
+        differenz_y = self.target_position['y'] - self.robot_pos['y']  
+        differenz_z = self.target_position['z'] - self.robot_pos['z']     
 
         robot_cmd = RobotCmd()
         robot_cmd.vel_x = differenz_x 
@@ -125,6 +122,7 @@ class regelungs_node(Node):
         robot_cmd.vel_z = differenz_z 
         self.robot_command_pub.publish(robot_cmd)
 
+    
 
 
 
@@ -136,3 +134,6 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
+
+
