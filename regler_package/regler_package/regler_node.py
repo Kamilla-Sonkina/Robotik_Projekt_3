@@ -56,8 +56,8 @@ class regelungs_node(Node):
 
     def object_class_callback(self, msg):
         self.object_class = msg.data
-        self.calculate_target_position()
-        self.go_to_target_position
+        self.calculate_target_position(object_class, object_pos, timestamp_object)
+        self.go_to_target_position(object_class)
     
     def timestamp_object_callback(self, msg):
         self.timestamp_object = msg.data
