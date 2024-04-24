@@ -1,8 +1,7 @@
 import rclpy
 from rclpy.node import Node
-from ro45_portalrobot_interfaces.msg import RobotPos
-from ro45_portalrobot_interfaces.msg import RobotCmd
-from std_msgs.msg import Float64
+from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
+from std_msgs.msg import Float64, String
 import time
 
 class regelungs_node(Node):
@@ -13,7 +12,7 @@ class regelungs_node(Node):
         
         self.object_pos_sub_x = self.create_subscription(Float64, 'object_position_x', self.object_position_x_callback, 10)
         self.object_pos_sub_y = self.create_subscription(Float64, 'object_position_y', self.object_position_y_callback, 10)
-        self.object_class_sub = self.create_subscription(Float64, 'object_class', self.object_class_callback, 10)
+        self.object_class_sub = self.create_subscription(String, 'object_class', self.object_class_callback, 10)
         self.timestamp_object = self.create_subscription(Float64, 'timestamp_object', self.timestamp_object_callback, 10)
 
         self.vel_sub = self.create_subscription(Float64, 'velocity', self.velocity_callback, 10)
@@ -33,7 +32,15 @@ class regelungs_node(Node):
         self.pick_up_z = 13
         self.gripper_is_activated = False
         self.target_position = {'x': None, 'y': None, 'z': None}
-        
+
+
+        self.last_calculation_time = time.time()
+
+        self.last_error_x = 0
+        self.last_error_y = 0
+        self.last_error_z = 0
+        self.kp = 9.85199  
+        self.kd = 6.447857  
 
 
 
@@ -56,8 +63,8 @@ class regelungs_node(Node):
 
     def object_class_callback(self, msg):
         self.object_class = msg.data
-        self.calculate_target_position(object_class, object_pos, timestamp_object)
-        self.go_to_target_position(object_class)
+        self.calculate_target_position(self.object_class, self.object_pos, self.timestamp_object)
+        self.go_to_target_position(self.object_class)
     
     def timestamp_object_callback(self, msg):
         self.timestamp_object = msg.data
@@ -87,7 +94,7 @@ class regelungs_node(Node):
 
     def go_to_target_position(self, object_class):
        
-        while(self.target_position is not self.robot_pos):
+        while((abs(self.target_position - self.robot_pos)) >= 0.5):
             self.wait(0.1)
 
         if(self.target_position == self.box_cat or self.target_position == self.box_unicorn):
@@ -111,16 +118,41 @@ class regelungs_node(Node):
                 self.gripper_is_activated = False  
 
     def regler(self):
-        #Platzhalter
+       
         differenz_x = self.target_position['x'] - self.robot_pos['x']    
         differenz_y = self.target_position['y'] - self.robot_pos['y']  
-        differenz_z = self.target_position['z'] - self.robot_pos['z']     
+        differenz_z = self.target_position['z'] - self.robot_pos['z']   
 
+        current_time = time.time()
+    
+        dt = current_time - self.last_calculation_time
+      
+        self.last_calculation_time = current_time
+
+
+        vel_x = self.compute_pd(differenz_x, self.last_error_x, dt)
+        self.last_error_x = differenz_x
+
+      
+        vel_y = self.compute_pd(differenz_y, self.last_error_y, dt)
+        self.last_error_y = differenz_y
+
+        vel_z = self.compute_pd(differenz_z, self.last_error_z, dt)
+        self.last_error_z = differenz_z
+
+     
         robot_cmd = RobotCmd()
-        robot_cmd.vel_x = differenz_x 
-        robot_cmd.vel_y = differenz_y
-        robot_cmd.vel_z = differenz_z 
+        robot_cmd.vel_x = vel_x
+        robot_cmd.vel_y = vel_y
+        robot_cmd.vel_z = vel_z
         self.robot_command_pub.publish(robot_cmd)
+        
+    def compute_pd(self, error, last_error, dt):
+     
+        derivative = (error - last_error) / dt
+       
+        control_signal = self.kp * error + self.kd * derivative
+        return control_signal
 
     
 
@@ -134,6 +166,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
-
-
