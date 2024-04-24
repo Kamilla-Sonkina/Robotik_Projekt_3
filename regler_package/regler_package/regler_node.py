@@ -41,7 +41,7 @@ class regelungs_node(Node):
         self.last_error_z = 0
         self.kp = 9.85199  
         self.kd = 6.447857  
-
+        self.kn = 50
 
 
     def arm_position_callback(self, msg):
@@ -130,14 +130,14 @@ class regelungs_node(Node):
         self.last_calculation_time = current_time
 
 
-        vel_x = self.compute_pd(differenz_x, self.last_error_x, dt)
+        vel_x = self.compute_pd(differenz_x, self.last_error_x, dt, self.kn)
         self.last_error_x = differenz_x
 
       
-        vel_y = self.compute_pd(differenz_y, self.last_error_y, dt)
+        vel_y = self.compute_pd(differenz_y, self.last_error_y, dt, self.kn)
         self.last_error_y = differenz_y
 
-        vel_z = self.compute_pd(differenz_z, self.last_error_z, dt)
+        vel_z = self.compute_pd(differenz_z, self.last_error_z, dt, self.kn)
         self.last_error_z = differenz_z
 
      
@@ -148,11 +148,11 @@ class regelungs_node(Node):
         self.robot_command_pub.publish(robot_cmd)
         
     def compute_pd(self, error, last_error, dt):
-     
+        # Compute derivative term with low-pass filtering
         derivative = (error - last_error) / dt
-       
-        control_signal = self.kp * error + self.kd * derivative
-        return control_signal
+        # Compute control signal with filtering
+        control_signal = self.kp * error + self.kd * (self.kn / (1 + self.kn * (1 / dt))) * derivative
+        return control_signal, error
 
     
 
