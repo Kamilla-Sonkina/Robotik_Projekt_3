@@ -1,0 +1,83 @@
+import pytest
+from regelungs_node import regelungs_node
+from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
+from std_msgs.msg import Float64, String
+
+def test_arm_position_callback():
+    node = regelungs_node()
+    msg = RobotPos()
+    msg.pos_x = 1
+    msg.pos_y = 2
+    msg.pos_z = 3
+    node.arm_position_callback(msg)
+    assert node.robot_pos == {'x': 1, 'y': 2, 'z': 3}
+
+def test_object_position_x_callback():
+    node = regelungs_node()
+    msg = Float64()
+    msg.data = 4
+    node.object_position_x_callback(msg)
+    assert node.object_pos['x'] == 4
+
+def test_object_position_y_callback():
+    node = regelungs_node()
+    msg = Float64()
+    msg.data = 5
+    node.object_position_y_callback(msg)
+    assert node.object_pos['y'] == 5
+
+def test_velocity_callback():
+    node = regelungs_node()
+    msg = Float64()
+    msg.data = 6
+    node.velocity_callback(msg)
+    assert node.velocity == 6
+
+def test_object_class_callback():
+    node = regelungs_node()
+    msg = String()
+    msg.data = 'unicorn'
+    node.calculate_target_position = lambda x, y, z: {'x': 1, 'y': 2, 'z': 3}  # just checking random values
+    node.go_to_target_position = lambda x: None  #same as above
+    node.object_class_callback(msg)
+    assert node.object_class == 'unicorn'
+
+def test_timestamp_object_callback():
+    node = regelungs_node()
+    msg = Float64()
+    msg.data = 7
+    node.timestamp_object_callback(msg)
+    assert node.timestamp_object == 7
+
+def test_calculate_target_position():
+    node = regelungs_node()
+    object_class = 'unicorn'
+    object_pos = {'x': 1, 'y': 2}
+    timestamp_object = 3
+    target_position = node.calculate_target_position(object_class, object_pos, timestamp_object)
+    assert target_position == {'x': 1, 'y': 2, 'z': 13}
+
+def test_go_to_target_position():
+    node = regelungs_node()
+    node.target_position = {'x': 1, 'y': 2, 'z': 3}
+    node.robot_pos = {'x': 0, 'y': 0, 'z': 0}
+    node.wait = lambda x: None  #same as above
+    node.go_to_target_position('unicorn')
+    assert node.gripper_is_activated == True
+
+def test_sort():
+    node = regelungs_node()
+    node.gripper_is_activated = True
+    node.go_to_target_position = lambda x: None  # same as above
+    node.sort('cat')
+    assert node.gripper_is_activated == False
+
+def test_regler():
+    node = regelungs_node()
+    node.target_position = {'x': 1, 'y': 2, 'z': 3}
+    node.robot_pos = {'x': 0, 'y': 0, 'z': 0}
+    node.compute_pd = lambda x, y, z, kn: (1, 2)  #same as above
+    node.regler()
+
+if __name__ == "__main__":
+    pytest.main()
