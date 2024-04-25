@@ -1,0 +1,39 @@
+import cv2
+import os
+
+class ImageStorage:
+    def __init__(self):
+        self.n = 0  
+        self.max_images = 30  
+        self.image_dir_path = "/home/user/ros_project/src/kamera/kamera/images"
+
+        # Check if the directory exists, create it if it doesn't
+        if not os.path.isdir(self.image_dir_path):
+            os.makedirs(self.image_dir_path)
+            print("Directory created")
+        else:
+            print("Directory exists")
+
+        self.cap = cv2.VideoCapture(0)
+
+    def save_image(self):
+        while True:
+            ret, frame = self.cap.read()
+            cv2.imshow("Video", frame)
+            key = cv2.waitKey(1)
+            if key == ord('a'):
+                cv2.imwrite(f"{self.image_dir_path}/image{self.n}.png", frame)
+                print(f"Saved image number {self.n}")
+                self.n += 1
+            elif key == ord('b'):
+                self.cap.release()
+                cv2.destroyAllWindows()
+                break
+
+    def start_capture(self):
+        while self.n < self.max_images:
+            self.save_image()
+
+# Create an instance of ImageStorage and start capturing images
+storage = ImageStorage()
+storage.start_capture()
