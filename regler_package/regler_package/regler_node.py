@@ -20,15 +20,33 @@ class regelungs_node(Node):
 
         self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_arm_commands', 10)
 
-        
+     
         self.robot_pos = {'x': None, 'y': None, 'z': None}
+        self.zero_position = {'x': None, 'y': None, 'z': None}
         self.object_pos = {'x': None, 'y': None}
         self.velocity = None
         self.object_class = None
-        self.box_unicorn =  {'x': 1, 'y': 2, 'z': 3}
-        self.box_cat =  {'x': 4, 'y': 5, 'z': 6}
-        self.default_pos =  {'x': 7, 'y': 8, 'z': 9}
+
+        self.box_unicorn =  {'x': 10, 'y': 11, 'z': 12}
+        self.box_unicorn['x'] += self.zero_position['x']
+        self.box_unicorn['y'] += self.zero_position['y']
+        self.box_unicorn['z'] += self.zero_position['z']
+
+        self.box_cat =  {'x': 10, 'y': 11, 'z': 12}
+        self.box_cat['x'] += self.zero_position['x']
+        self.box_cat['y'] += self.zero_position['y']
+        self.box_cat['z'] += self.zero_position['z']
+
+        self.default_pos =  {'x': 10, 'y': 11, 'z': 12}
+        self.default_pos['x'] += self.zero_position['x']
+        self.default_pos['y'] += self.zero_position['y']
+        self.default_pos['z'] += self.zero_position['z']
+        
         self.safe_pos =  {'x': 10, 'y': 11, 'z': 12}
+        self.safe_pos['x'] += self.zero_position['x']
+        self.safe_pos['y'] += self.zero_position['y']
+        self.safe_pos['z'] += self.zero_position['z']
+
         self.pick_up_z = 13
         self.gripper_is_activated = False
         self.target_position = {'x': None, 'y': None, 'z': None}
@@ -42,6 +60,34 @@ class regelungs_node(Node):
         self.kp = 9.85199  
         self.kd = 6.447857  
         self.kn = 50
+
+        self.velo_zaehler = 0
+
+
+        while(abs(self.robot_pos['x'] - self.zero_position['x']) >= 0.1):
+            self.robot_pos['x'] = self.zero_position['x']
+            robot_cmd = RobotCmd()
+            robot_cmd.accel_x = 0.1
+            self.robot_command_pub.publish(robot_cmd)
+
+        while(abs(self.robot_pos['y'] - self.zero_position['y']) >= 0.1):
+            self.robot_pos['y'] = self.zero_position['y']
+            robot_cmd = RobotCmd()
+            robot_cmd.accel_y = -0.1
+            self.robot_command_pub.publish(robot_cmd)
+
+        while(abs(self.robot_pos['z'] - self.zero_position['z']) >= 0.1):
+            self.robot_pos['z'] = self.zero_position['z']
+            robot_cmd = RobotCmd()
+            robot_cmd.accel_z = -0.1
+            self.robot_command_pub.publish(robot_cmd)
+        
+        robot_cmd = RobotCmd()
+        robot_cmd.activate_gripper = False
+        self.robot_command_pub.publish(robot_cmd)
+          
+
+
 
 
     def arm_position_callback(self, msg):
@@ -58,8 +104,11 @@ class regelungs_node(Node):
           
 
     def velocity_callback(self, msg):
-        self.velocity = msg.data
-        
+        if(self.velo_zaehler != 0):
+            self.velocity = (self.velocity/self.velo_zaehler + msg.data/self.velo_zaehler) / self.velo_zaehler + 1
+        else: 
+            self.velocity = msg.data
+        self.velo_zaehler = self.velo_zaehler + 1
 
     def object_class_callback(self, msg):
         self.object_class = msg.data
@@ -80,7 +129,7 @@ class regelungs_node(Node):
             else:
                 self.target_position = self.default_pos
         
-        if((object_class and object_pos and timestamp_object) is not None):
+        if(object_pos is not None and timestamp_object is not None):
             self.target_position['x'] = object_pos['x'] + self.velocity * (time.time() - timestamp_object)
             self.target_position['y'] = object_pos['y']
             self.target_position['z'] = self.pick_up_z
@@ -92,30 +141,38 @@ class regelungs_node(Node):
         return self.target_position
        
 
-    def go_to_target_position(self, object_class):
+    async def go_to_target_position(self, object_class):
        
         while((abs(self.target_position - self.robot_pos)) >= 0.5):
-            self.wait(0.1)
+            self.regler()
+            self.go_to_target_position()
 
-        if(self.target_position == self.box_cat or self.target_position == self.box_unicorn):
-            self.robot_command_pub.activate_gripper = False
+        if(abs(self.target_position - self.box_cat) >= 0.5 or abs(self.target_position - self.box_unicorn) >= 0.5):
             self.gripper_is_activated = False
+            self.regler()
             self.go_to_target_position(self.default_pos)
+        elif(abs(self.target_position - self.default_pos) >= 0.5):
+            await(5)
         else:
-            self.robot_pos.activate_gripper = True
-            self.gripper_is_activated = True
-            self.sort(object_class)
+            if(abs(self.robot_pos['z'] - self.pick_up_z) >= 0.5):
+                self.gripper_is_activated = True
+                self.regler()
+                self.sort(object_class)
+            else:
+                self.robot_pos['z'] = self.pick_up_z
+                self.regler()
+                self.calculate_target_position()
        
     def sort(self, object_class):
         if(self.gripper_is_activated):
             if(object_class == 'cat'):
                 self.go_to_target_position(self.box_cat)
-                self.robot_command_pub.activate_gripper = False
                 self.gripper_is_activated = False
+                self.regler()
             if(object_class ==  'unicorn'):
                 self.go_to_target_position(self.box_unicorn)  
-                self.robot_command_pub.activate_gripper = False
                 self.gripper_is_activated = False  
+                self.regler()
 
     def regler(self):
        
@@ -142,9 +199,10 @@ class regelungs_node(Node):
 
      
         robot_cmd = RobotCmd()
-        robot_cmd.vel_x = vel_x
-        robot_cmd.vel_y = vel_y
-        robot_cmd.vel_z = vel_z
+        robot_cmd.accel_x = vel_x
+        robot_cmd.accel_y = vel_y
+        robot_cmd.accel_z = vel_z
+        robot_cmd.activate_gripper = self.gripper_is_activated
         self.robot_command_pub.publish(robot_cmd)
         
     def compute_pd(self, error, last_error, dt):
