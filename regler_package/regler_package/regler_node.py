@@ -69,22 +69,30 @@ class regelungs_node(Node):
             robot_cmd = RobotCmd()
             robot_cmd.accel_x = 0.1
             self.robot_command_pub.publish(robot_cmd)
+            time.sleep(1)
 
         while(abs(self.robot_pos['y'] - self.zero_position['y']) >= 0.1):
             self.robot_pos['y'] = self.zero_position['y']
             robot_cmd = RobotCmd()
             robot_cmd.accel_y = -0.1
             self.robot_command_pub.publish(robot_cmd)
+            time.sleep(1)
 
         while(abs(self.robot_pos['z'] - self.zero_position['z']) >= 0.1):
             self.robot_pos['z'] = self.zero_position['z']
             robot_cmd = RobotCmd()
             robot_cmd.accel_z = -0.1
             self.robot_command_pub.publish(robot_cmd)
+            time.sleep(1)
         
         robot_cmd = RobotCmd()
         robot_cmd.activate_gripper = False
         self.robot_command_pub.publish(robot_cmd)
+
+        self.target_position['x'] = self.default_pos['x']
+        self.target_position['y'] = self.default_pos['y']
+        self.target_position['z'] = self.default_pos['z']
+        self.regler()
           
 
 
