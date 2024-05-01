@@ -1,96 +1,9 @@
 import rclpy
 from rclpy.node import Node
 from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
+from object_interfaces.msg import ObjectData
 from std_msgs.msg import Float64, String
 import time
-
-###
-class RegelungsNodeStateMachine:
-    DEFAULT = "Default"
-    MOVING_TO_TARGET = "MovingToTarget"
-    PICKING_OBJECT = "PickingObject"
-    SORTING = "Sorting"
-
-    def __init__(self):
-        self.state = self.DEFAULT
-
-    def run(self):
-        while True:
-            if self.state == self.DEFAULT:
-                # Logic for the Default state
-                self.robot_pos['x'] = self.zero_position['x']
-                self.robot_pos['y'] = self.zero_position['y']
-                self.robot_pos['z'] = self.zero_position['z']
-                robot_cmd = RobotCmd()
-                robot_cmd.accel_x = 0.1
-                self.robot_command_pub.publish(robot_cmd)
-                time.sleep(1)
-
-                robot_cmd = RobotCmd()
-                robot_cmd.accel_y = -0.1
-                self.robot_command_pub.publish(robot_cmd)
-                time.sleep(1)
-
-                robot_cmd = RobotCmd()
-                robot_cmd.accel_z = -0.1
-                self.robot_command_pub.publish(robot_cmd)
-                time.sleep(1)
-
-                robot_cmd = RobotCmd()
-                robot_cmd.activate_gripper = False
-                self.robot_command_pub.publish(robot_cmd)
-
-                self.target_position['x'] = self.default_pos['x']
-                self.target_position['y'] = self.default_pos['y']
-                self.target_position['z'] = self.default_pos['z']
-                self.regler()
-
-                if condition:  # Transition 
-                    self.state = self.MOVING_TO_TARGET
-
-            elif self.state == self.MOVING_TO_TARGET:
-                # Logic for the MovingToTarget state
-                while abs(self.target_position - self.robot_pos) >= 0.5:
-                    self.regler()
-                    self.go_to_target_position()
-
-                if abs(self.target_position - self.box_cat) >= 0.5 or abs(self.target_position - self.box_unicorn) >= 0.5:
-                    self.gripper_is_activated = False
-                    self.regler()
-                    self.go_to_target_position(self.default_pos)
-                elif abs(self.target_position - self.default_pos) >= 0.5:
-                    await(5)
-                else:
-                    if abs(self.robot_pos['z'] - self.pick_up_z) >= 0.5:
-                        self.gripper_is_activated = True
-                        self.regler()
-                    else:
-                        self.robot_pos['z'] = self.pick_up_z
-                        self.regler()
-                        self.calculate_target_position()
-
-                if condition:  # Transition 
-                    self.state = self.PICKING_OBJECT
-
-            elif self.state == self.PICKING_OBJECT:
-                # Logic 
-                if condition:  
-                    self.state = self.SORTING
-
-            elif self.state == self.SORTING:
-                
-                if self.gripper_is_activated:
-                    if self.object_class == 'cat':
-                        self.go_to_target_position(self.box_cat)
-                        self.gripper_is_activated = False
-                        self.regler()
-                    elif self.object_class == 'unicorn':
-                        self.go_to_target_position(self.box_unicorn)
-                        self.gripper_is_activated = False
-                        self.regler()
-
-                
-###
 
 class regelungs_node(Node):
     def __init__(self):
@@ -98,10 +11,8 @@ class regelungs_node(Node):
 
         self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_arm_position', self.arm_position_callback, 10)
         
-        self.object_pos_sub_x = self.create_subscription(Float64, 'object_position_x', self.object_position_x_callback, 10)
-        self.object_pos_sub_y = self.create_subscription(Float64, 'object_position_y', self.object_position_y_callback, 10)
-        self.object_class_sub = self.create_subscription(String, 'object_class', self.object_class_callback, 10)
-        self.timestamp_object = self.create_subscription(Float64, 'timestamp_object', self.timestamp_object_callback, 10)
+        self.object_data_sub = self.create_subscription(ObjectData, 'object_data', self.object_data_callback, 10)
+        
 
         self.vel_sub = self.create_subscription(Float64, 'velocity', self.velocity_callback, 10)
 
@@ -110,10 +21,11 @@ class regelungs_node(Node):
 
      
         self.robot_pos = {'x': None, 'y': None, 'z': None}
-        self.zero_position = {'x': None, 'y': None, 'z': None}
-        self.object_pos = {'x': None, 'y': None}
+        self.object_data = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
+        self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
         self.velocity = None
-        self.object_class = None
+
+
 
         self.box_unicorn =  {'x': 10, 'y': 11, 'z': 12}
         self.box_unicorn['x'] += self.zero_position['x']
@@ -150,6 +62,8 @@ class regelungs_node(Node):
         self.kn = 50
 
         self.velo_zaehler = 0
+
+        self.queue = []
 
 
         while(abs(self.robot_pos['x'] - self.zero_position['x']) >= 0.1):
@@ -192,12 +106,16 @@ class regelungs_node(Node):
         self.robot_pos['z'] = msg.pos_z
         self.regler()
 
-    def object_position_x_callback(self, msg):
-        self.object_pos['x'] = msg.data
+    def object_data_callback(self, msg):
+        self.object_data[0][0] = msg.pos_x
+        self.object_data[0][1] = msg.pos_y
+        self.object_data[1][0] = msg.object_class
+        self.object_data[2][0] = msg.timestamp_value
+        self.object_data[3][0] = msg.index_value
+
+        self.enqueue(self.object_data)
        
-    def object_position_y_callback(self, msg):
-        self.object_pos['y'] = msg.data
-          
+    
 
     def velocity_callback(self, msg):
         if(self.velo_zaehler != 0):
@@ -206,28 +124,22 @@ class regelungs_node(Node):
             self.velocity = msg.data
         self.velo_zaehler = self.velo_zaehler + 1
 
-    def object_class_callback(self, msg):
-        self.object_class = msg.data
-        self.calculate_target_position(self.object_class, self.object_pos, self.timestamp_object)
-        self.go_to_target_position(self.object_class)
     
-    def timestamp_object_callback(self, msg):
-        self.timestamp_object = msg.data
         
 
-    def calculate_target_position(self, object_class, object_pos, timestamp_object):
+    def calculate_target_position(self):
         
         if(self.gripper_is_activated is True):
-            if(object_class == 'cat'):
+            if(self.oldest_object['class'] == 'cat'):
                 self.target_position = self.box_cat
-            elif(object_class == 'unicorn'):
+            elif(self.oldest_object['class'] == 'unicorn'):
                 self.target_position = self.box_unicorn
             else:
                 self.target_position = self.default_pos
         
-        if(object_pos is not None and timestamp_object is not None):
-            self.target_position['x'] = object_pos['x'] + self.velocity * (time.time() - timestamp_object)
-            self.target_position['y'] = object_pos['y']
+        if( len(self.queue) != 0):
+            self.target_position['x'] = self.oldest_object['class'] + self.velocity * (time.time() - self.oldest_object['timestamp'])
+            self.target_position['y'] = self.oldest_object['class']
             self.target_position['z'] = self.pick_up_z
 
 
@@ -237,38 +149,39 @@ class regelungs_node(Node):
         return self.target_position
        
 
-    async def go_to_target_position(self, object_class):
+    async def go_to_target_position(self):
        
-        while((abs(self.target_position - self.robot_pos)) >= 0.5):
+        while((abs(self.target_position - self.robot_pos)) >= 0.5): # oder while(MOVING_STATE == True):
             self.regler()
             self.go_to_target_position()
 
-        if(abs(self.target_position - self.box_cat) >= 0.5 or abs(self.target_position - self.box_unicorn) >= 0.5):
+        if(abs(self.target_position - self.box_cat) >= 0.5 or abs(self.target_position - self.box_unicorn) >= 0.5): # oder if(OVER_BOX):
             self.gripper_is_activated = False
             self.regler()
             self.go_to_target_position(self.default_pos)
-        elif(abs(self.target_position - self.default_pos) >= 0.5):
+        elif(abs(self.target_position - self.default_pos) >= 0.5): # oder elif(DEFAULT_STATE):
             await(5)
         else:
-            if(abs(self.robot_pos['z'] - self.pick_up_z) >= 0.5):
+            if(abs(self.robot_pos['z'] - self.pick_up_z) >= 0.5): # oder if(PICK_UP_READY_STATE)
                 self.gripper_is_activated = True
                 self.regler()
-                self.sort(object_class)
+                self.sort(self.oldest_object['class'])
             else:
                 self.robot_pos['z'] = self.pick_up_z
                 self.regler()
                 self.calculate_target_position()
        
-    def sort(self, object_class):
-        if(self.gripper_is_activated):
-            if(object_class == 'cat'):
+    def sort(self, oldest_object):
+        if(self.gripper_is_activated): 
+            if(oldest_object['class'] == 'cat'):
                 self.go_to_target_position(self.box_cat)
                 self.gripper_is_activated = False
-                self.regler()
-            if(object_class ==  'unicorn'):
+                self.oldest_object = self.dequeue
+            if(oldest_object['class'] ==  'unicorn'):
                 self.go_to_target_position(self.box_unicorn)  
                 self.gripper_is_activated = False  
-                self.regler()
+                self.oldest_object = self.dequeue
+                
 
     def regler(self):
        
@@ -309,7 +222,12 @@ class regelungs_node(Node):
         return control_signal, error
 
     
-
+    def enqueue(self, object_data):
+        self.queue.append(object_data)
+    
+    def dequeue(self):
+        if(len(self.queue) != 0):
+            self.queue.pop(0)
 
 
 def main(args=None):
