@@ -4,6 +4,94 @@ from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
 from std_msgs.msg import Float64, String
 import time
 
+###
+class RegelungsNodeStateMachine:
+    DEFAULT = "Default"
+    MOVING_TO_TARGET = "MovingToTarget"
+    PICKING_OBJECT = "PickingObject"
+    SORTING = "Sorting"
+
+    def __init__(self):
+        self.state = self.DEFAULT
+
+    def run(self):
+        while True:
+            if self.state == self.DEFAULT:
+                # Logic for the Default state
+                self.robot_pos['x'] = self.zero_position['x']
+                self.robot_pos['y'] = self.zero_position['y']
+                self.robot_pos['z'] = self.zero_position['z']
+                robot_cmd = RobotCmd()
+                robot_cmd.accel_x = 0.1
+                self.robot_command_pub.publish(robot_cmd)
+                time.sleep(1)
+
+                robot_cmd = RobotCmd()
+                robot_cmd.accel_y = -0.1
+                self.robot_command_pub.publish(robot_cmd)
+                time.sleep(1)
+
+                robot_cmd = RobotCmd()
+                robot_cmd.accel_z = -0.1
+                self.robot_command_pub.publish(robot_cmd)
+                time.sleep(1)
+
+                robot_cmd = RobotCmd()
+                robot_cmd.activate_gripper = False
+                self.robot_command_pub.publish(robot_cmd)
+
+                self.target_position['x'] = self.default_pos['x']
+                self.target_position['y'] = self.default_pos['y']
+                self.target_position['z'] = self.default_pos['z']
+                self.regler()
+
+                if condition:  # Transition 
+                    self.state = self.MOVING_TO_TARGET
+
+            elif self.state == self.MOVING_TO_TARGET:
+                # Logic for the MovingToTarget state
+                while abs(self.target_position - self.robot_pos) >= 0.5:
+                    self.regler()
+                    self.go_to_target_position()
+
+                if abs(self.target_position - self.box_cat) >= 0.5 or abs(self.target_position - self.box_unicorn) >= 0.5:
+                    self.gripper_is_activated = False
+                    self.regler()
+                    self.go_to_target_position(self.default_pos)
+                elif abs(self.target_position - self.default_pos) >= 0.5:
+                    await(5)
+                else:
+                    if abs(self.robot_pos['z'] - self.pick_up_z) >= 0.5:
+                        self.gripper_is_activated = True
+                        self.regler()
+                    else:
+                        self.robot_pos['z'] = self.pick_up_z
+                        self.regler()
+                        self.calculate_target_position()
+
+                if condition:  # Transition 
+                    self.state = self.PICKING_OBJECT
+
+            elif self.state == self.PICKING_OBJECT:
+                # Logic 
+                if condition:  
+                    self.state = self.SORTING
+
+            elif self.state == self.SORTING:
+                
+                if self.gripper_is_activated:
+                    if self.object_class == 'cat':
+                        self.go_to_target_position(self.box_cat)
+                        self.gripper_is_activated = False
+                        self.regler()
+                    elif self.object_class == 'unicorn':
+                        self.go_to_target_position(self.box_unicorn)
+                        self.gripper_is_activated = False
+                        self.regler()
+
+                
+###
+
 class regelungs_node(Node):
     def __init__(self):
         super().__init__('regelungs_node')
