@@ -118,11 +118,8 @@ class regelungs_node(Node):
     
 
     def velocity_callback(self, msg):
-        if(self.velo_zaehler != 0):
-            self.velocity = (self.velocity/self.velo_zaehler + msg.data/self.velo_zaehler) / self.velo_zaehler + 1
-        else: 
-            self.velocity = msg.data
-        self.velo_zaehler = self.velo_zaehler + 1
+        self.velocity = ((self.velocity * self.velo_zaehler) + (msg.data)) / (self.velo_zaehler + 1)
+        self.velo_zaehler += 1
 
     
         
