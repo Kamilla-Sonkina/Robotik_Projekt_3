@@ -212,9 +212,9 @@ class regelungs_node(Node):
         self.robot_command_pub.publish(robot_cmd)
         
     def compute_pd(self, error, last_error, dt):
-        # Compute derivative term with low-pass filtering
+  
         derivative = (error - last_error) / dt
-        # Compute control signal with filtering
+       
         control_signal = self.kp * error + self.kd * (self.kn / (1 + self.kn * (1 / dt))) * derivative
         return control_signal, error
 
