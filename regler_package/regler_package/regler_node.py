@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
 from object_interfaces.msg import ObjectData
-from std_msgs.msg import Float64, String
+from std_msgs.msg import Float64, Float32
 import time
 
 class regelungs_node(Node):
@@ -20,11 +20,11 @@ class regelungs_node(Node):
         self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_arm_commands', 10)
 
      
-        self.robot_pos = {'x': None, 'y': None, 'z': None}
+        self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
         self.object_data = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
         self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
-        self.velocity = None
-
+        self.velocity = 0
+        self.zero_position = {'x': 0, 'y': 0, 'z': 0}
 
 
         self.box_unicorn =  {'x': 10, 'y': 11, 'z': 12}
@@ -107,8 +107,8 @@ class regelungs_node(Node):
         self.regler()
 
     def object_data_callback(self, msg):
-        self.object_data[0][0] = msg.pos_x
-        self.object_data[0][1] = msg.pos_y
+        self.object_data[0][0] = msg.object_pos_x
+        self.object_data[0][1] = msg.object_pos_y
         self.object_data[1][0] = msg.object_class
         self.object_data[2][0] = msg.timestamp_value
         self.object_data[3][0] = msg.index_value
@@ -118,8 +118,11 @@ class regelungs_node(Node):
     
 
     def velocity_callback(self, msg):
-        self.velocity = ((self.velocity * self.velo_zaehler) + (msg.data)) / (self.velo_zaehler + 1)
-        self.velo_zaehler += 1
+        if(self.velo_zaehler != 0):
+            self.velocity = (self.velocity/self.velo_zaehler + msg.data/self.velo_zaehler) / self.velo_zaehler + 1
+        else: 
+            self.velocity = msg.data
+        self.velo_zaehler = self.velo_zaehler + 1
 
     
         
@@ -193,16 +196,17 @@ class regelungs_node(Node):
         self.last_calculation_time = current_time
 
 
-        vel_x = self.compute_pd(differenz_x, self.last_error_x, dt, self.kn)
+        vel_x = self.compute_pd(differenz_x, self.last_error_x, dt)
         self.last_error_x = differenz_x
-
+        vel_x = Float64(vel_x)
       
-        vel_y = self.compute_pd(differenz_y, self.last_error_y, dt, self.kn)
+        vel_y = self.compute_pd(differenz_y, self.last_error_y, dt)
         self.last_error_y = differenz_y
+        vel_y = Float64(vel_y)
 
-        vel_z = self.compute_pd(differenz_z, self.last_error_z, dt, self.kn)
+        vel_z = self.compute_pd(differenz_z, self.last_error_z, dt)
         self.last_error_z = differenz_z
-
+        vel_z = Float64(vel_z)
      
         robot_cmd = RobotCmd()
         robot_cmd.accel_x = vel_x
@@ -212,11 +216,12 @@ class regelungs_node(Node):
         self.robot_command_pub.publish(robot_cmd)
         
     def compute_pd(self, error, last_error, dt):
-  
+      
         derivative = (error - last_error) / dt
        
         control_signal = self.kp * error + self.kd * (self.kn / (1 + self.kn * (1 / dt))) * derivative
-        return control_signal, error
+        control_signal = Float64(control_signal)
+        return control_signal
 
     
     def enqueue(self, object_data):
