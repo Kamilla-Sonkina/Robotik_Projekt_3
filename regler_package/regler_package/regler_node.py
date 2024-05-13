@@ -59,7 +59,7 @@ class regelungs_node(Node):
         self.last_error_z = 0
         self.kp = 9.85199  
         self.kd = 6.447857  
-        self.kn = 50
+        
 
         self.velo_zaehler = 0
 
@@ -239,3 +239,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
