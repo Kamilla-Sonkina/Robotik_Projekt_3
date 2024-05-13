@@ -20,7 +20,7 @@ class regelungs_node(Node):
         self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_arm_commands', 10)
 
      
-        self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
+        self.robot_pos = {'x': 10, 'y': 10, 'z': 10}
         self.object_data = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
         self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
         self.velocity = 0
@@ -118,11 +118,8 @@ class regelungs_node(Node):
     
 
     def velocity_callback(self, msg):
-        if(self.velo_zaehler != 0):
-            self.velocity = (self.velocity/self.velo_zaehler + msg.data/self.velo_zaehler) / self.velo_zaehler + 1
-        else: 
-            self.velocity = msg.data
-        self.velo_zaehler = self.velo_zaehler + 1
+        self.velocity = (self.velocity * self.velo_zaehler + msg.data) / (self.velo_zaehler + 1)
+        self.velo_zaehler += 1
 
     
         
@@ -195,18 +192,18 @@ class regelungs_node(Node):
       
         self.last_calculation_time = current_time
 
-
+        vel_x = Float32()
         vel_x = self.compute_pd(differenz_x, self.last_error_x, dt)
         self.last_error_x = differenz_x
-        vel_x = Float64(vel_x)
       
+        vel_y = Float32()
         vel_y = self.compute_pd(differenz_y, self.last_error_y, dt)
         self.last_error_y = differenz_y
-        vel_y = Float64(vel_y)
 
+        vel_z = Float32()
         vel_z = self.compute_pd(differenz_z, self.last_error_z, dt)
         self.last_error_z = differenz_z
-        vel_z = Float64(vel_z)
+        
      
         robot_cmd = RobotCmd()
         robot_cmd.accel_x = vel_x
@@ -218,9 +215,11 @@ class regelungs_node(Node):
     def compute_pd(self, error, last_error, dt):
       
         derivative = (error - last_error) / dt
-       
-        control_signal = self.kp * error + self.kd * (self.kn / (1 + self.kn * (1 / dt))) * derivative
-        control_signal = Float64(control_signal)
+      
+        control_signal = self.kp * error + self.kd * derivative
+
+        control_signal = float(control_signal)
+        
         return control_signal
 
     
