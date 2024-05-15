@@ -4,6 +4,8 @@ from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
 from object_interfaces.msg import ObjectData
 from std_msgs.msg import Float64, Float32
 import time
+from threading import Event
+
 
 class regelungs_node(Node):
     def __init__(self):
@@ -65,29 +67,46 @@ class regelungs_node(Node):
 
         self.queue = []
 
+       
+        self.position_updated_event = Event()
 
-        while(abs(self.robot_pos['x'] - self.zero_position['x']) >= 0.1):
+      
+        self.position_updated_event.wait()
+
+        while abs(self.robot_pos['x'] - self.zero_position['x']) >= 0.1:
             self.robot_pos['x'] = self.zero_position['x']
             robot_cmd = RobotCmd()
             robot_cmd.accel_x = 0.1
+            robot_cmd.accel_y = 0
+            robot_cmd.accel_z = 0
+            robot_cmd.activate_gripper = False
             self.robot_command_pub.publish(robot_cmd)
             time.sleep(1)
 
-        while(abs(self.robot_pos['y'] - self.zero_position['y']) >= 0.1):
+        while abs(self.robot_pos['y'] - self.zero_position['y']) >= 0.1:
             self.robot_pos['y'] = self.zero_position['y']
             robot_cmd = RobotCmd()
+            robot_cmd.accel_x = 0
             robot_cmd.accel_y = -0.1
+            robot_cmd.accel_z = 0
+            robot_cmd.activate_gripper = False
             self.robot_command_pub.publish(robot_cmd)
             time.sleep(1)
 
-        while(abs(self.robot_pos['z'] - self.zero_position['z']) >= 0.1):
+        while abs(self.robot_pos['z'] - self.zero_position['z']) >= 0.1:
             self.robot_pos['z'] = self.zero_position['z']
             robot_cmd = RobotCmd()
+            robot_cmd.accel_x = 0
+            robot_cmd.accel_y = 0
             robot_cmd.accel_z = -0.1
+            robot_cmd.activate_gripper = False
             self.robot_command_pub.publish(robot_cmd)
             time.sleep(1)
         
         robot_cmd = RobotCmd()
+        robot_cmd.accel_x = 0
+        robot_cmd.accel_y = 0
+        robot_cmd.accel_z = 0
         robot_cmd.activate_gripper = False
         self.robot_command_pub.publish(robot_cmd)
 
@@ -95,15 +114,12 @@ class regelungs_node(Node):
         self.target_position['y'] = self.default_pos['y']
         self.target_position['z'] = self.default_pos['z']
         self.regler()
-          
-
-
-
 
     def arm_position_callback(self, msg):
         self.robot_pos['x'] = msg.pos_x
         self.robot_pos['y'] = msg.pos_y
         self.robot_pos['z'] = msg.pos_z
+        self.position_updated_event.set() 
         self.regler()
 
     def object_data_callback(self, msg):
@@ -192,15 +208,15 @@ class regelungs_node(Node):
       
         self.last_calculation_time = current_time
 
-        vel_x = Float32()
+        
         vel_x = self.compute_pd(differenz_x, self.last_error_x, dt)
         self.last_error_x = differenz_x
       
-        vel_y = Float32()
+        
         vel_y = self.compute_pd(differenz_y, self.last_error_y, dt)
         self.last_error_y = differenz_y
 
-        vel_z = Float32()
+        
         vel_z = self.compute_pd(differenz_z, self.last_error_z, dt)
         self.last_error_z = differenz_z
         
