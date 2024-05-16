@@ -7,6 +7,24 @@ import time
 from threading import Event
 
 
+class RobotCommand:
+    def __init__(self):
+        self.command = RobotCmd()
+
+    def set_acceleration(self, accel_x, accel_y, accel_z):
+        self.command.accel_x = accel_x
+        self.command.accel_y = accel_y
+        self.command.accel_z = accel_z
+
+    def activate_gripper(self, activate):
+        self.command.activate_gripper = activate
+
+    def get_command(self):
+        return self.command
+    
+
+
+
 class regelungs_node(Node):
     def __init__(self):
         super().__init__('regelungs_node')
@@ -70,50 +88,37 @@ class regelungs_node(Node):
        
         self.position_updated_event = Event()
 
-      
         self.position_updated_event.wait()
 
-        while abs(self.robot_pos['x'] - self.zero_position['x']) >= 0.1:
-            self.robot_pos['x'] = self.zero_position['x']
-            robot_cmd = RobotCmd()
-            robot_cmd.accel_x = 0.1
-            robot_cmd.accel_y = 0
-            robot_cmd.accel_z = 0
-            robot_cmd.activate_gripper = False
-            self.robot_command_pub.publish(robot_cmd)
-            time.sleep(1)
-
-        while abs(self.robot_pos['y'] - self.zero_position['y']) >= 0.1:
-            self.robot_pos['y'] = self.zero_position['y']
-            robot_cmd = RobotCmd()
-            robot_cmd.accel_x = 0
-            robot_cmd.accel_y = -0.1
-            robot_cmd.accel_z = 0
-            robot_cmd.activate_gripper = False
-            self.robot_command_pub.publish(robot_cmd)
-            time.sleep(1)
-
-        while abs(self.robot_pos['z'] - self.zero_position['z']) >= 0.1:
-            self.robot_pos['z'] = self.zero_position['z']
-            robot_cmd = RobotCmd()
-            robot_cmd.accel_x = 0
-            robot_cmd.accel_y = 0
-            robot_cmd.accel_z = -0.1
-            robot_cmd.activate_gripper = False
-            self.robot_command_pub.publish(robot_cmd)
-            time.sleep(1)
-        
-        robot_cmd = RobotCmd()
-        robot_cmd.accel_x = 0
-        robot_cmd.accel_y = 0
-        robot_cmd.accel_z = 0
-        robot_cmd.activate_gripper = False
-        self.robot_command_pub.publish(robot_cmd)
-
+        self.move_to_zero_position()
         self.target_position['x'] = self.default_pos['x']
         self.target_position['y'] = self.default_pos['y']
         self.target_position['z'] = self.default_pos['z']
         self.regler()
+
+    def move_to_zero_position(self):
+        while abs(self.robot_pos['x'] - self.zero_position['x']) >= 0.1:
+            self.robot_pos['x'] = self.zero_position['x']
+            self.publish_robot_command(0.1, 0, 0, False)
+            time.sleep(1)
+
+        while abs(self.robot_pos['y'] - self.zero_position['y']) >= 0.1:
+            self.robot_pos['y'] = self.zero_position['y']
+            self.publish_robot_command(0, -0.1, 0, False)
+            time.sleep(1)
+
+        while abs(self.robot_pos['z'] - self.zero_position['z']) >= 0.1:
+            self.robot_pos['z'] = self.zero_position['z']
+            self.publish_robot_command(0, 0, -0.1, False)
+            time.sleep(1)
+        
+        self.publish_robot_command(0, 0, 0, False)
+
+    def publish_robot_command(self, accel_x, accel_y, accel_z, activate_gripper):
+        robot_cmd = RobotCommand()
+        robot_cmd.set_acceleration(accel_x, accel_y, accel_z)
+        robot_cmd.activate_gripper(activate_gripper)
+        self.robot_command_pub.publish(robot_cmd.get_command())
 
     def arm_position_callback(self, msg):
         self.robot_pos['x'] = msg.pos_x
@@ -221,12 +226,7 @@ class regelungs_node(Node):
         self.last_error_z = differenz_z
         
      
-        robot_cmd = RobotCmd()
-        robot_cmd.accel_x = vel_x
-        robot_cmd.accel_y = vel_y
-        robot_cmd.accel_z = vel_z
-        robot_cmd.activate_gripper = self.gripper_is_activated
-        self.robot_command_pub.publish(robot_cmd)
+        self.publish_robot_command(vel_x, vel_y, vel_z, self.gripper_is_activated)
         
     def compute_pd(self, error, last_error, dt):
       
@@ -255,4 +255,5 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
 
