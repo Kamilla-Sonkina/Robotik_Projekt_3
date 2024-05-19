@@ -16,6 +16,8 @@ class regelungs_node(Node):
     def __init__(self):
         super().__init__('regelungs_node')
 
+        self.get_logger().info('Start initializing')
+
         self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_arm_position', self.arm_position_callback, 10)
         
         self.object_data_sub = self.create_subscription(ObjectData, 'object_data', self.object_data_callback, 10)
@@ -66,16 +68,17 @@ class regelungs_node(Node):
         self.last_error_z = 0
         self.kp = 9.85199  
         self.kd = 6.447857  
+        self.first_arm_pos = False
         
 
         self.velo_zaehler = 0
 
         self.queue = []
 
-       
-        self.position_updated_event = Event()
+        
 
-        self.position_updated_event.wait()
+           
+
 
         self.move_to_zero_position()
         self.target_position['x'] = self.default_pos['x']
@@ -84,6 +87,10 @@ class regelungs_node(Node):
         self.regler()
 
     async def move_to_zero_position(self):
+        while(self.first_arm_pos == False):
+            self.get_logger().info('Waiting for update')
+            await(50)
+        self.get_logger().info('Start move to zero position')
         while abs(self.robot_pos['x'] - self.zero_position['x']) >= 0.1:
             self.zero_position['x'] = self.robot_pos['x']
             robot_cmd = RobotCmd()
@@ -122,7 +129,7 @@ class regelungs_node(Node):
         self.robot_pos['x'] = msg.pos_x
         self.robot_pos['y'] = msg.pos_y
         self.robot_pos['z'] = msg.pos_z
-        self.position_updated_event.set() 
+        self.first_arm_pos = True
         self.regler()
 
     def object_data_callback(self, msg):
@@ -144,6 +151,8 @@ class regelungs_node(Node):
         
 
     def calculate_target_position(self):
+
+        self.get_logger().info('Start calculating target position')
         
         if(self.gripper_is_activated is True):
             if(self.oldest_object['class'] == 'cat'):
@@ -166,6 +175,7 @@ class regelungs_node(Node):
        
 
     async def go_to_target_position(self):
+        self.get_logger().info('Start going to target position')
        
         while((abs(self.target_position - self.robot_pos)) >= 0.5): # oder while(MOVING_STATE == True):
             self.regler()
@@ -188,6 +198,7 @@ class regelungs_node(Node):
                 self.calculate_target_position()
        
     def sort(self, oldest_object):
+        self.get_logger().info('Start sorting')
         if(self.gripper_is_activated): 
             if(oldest_object['class'] == 'cat'):
                 self.go_to_target_position(self.box_cat)
@@ -200,6 +211,7 @@ class regelungs_node(Node):
                 
 
     def regler(self):
+        self.get_logger().info('Start controlling')
        
         differenz_x = self.target_position['x'] - self.robot_pos['x']    
         differenz_y = self.target_position['y'] - self.robot_pos['y']  
@@ -230,8 +242,11 @@ class regelungs_node(Node):
         robot_cmd.accel_z = vel_z
         robot_cmd.activate_gripper = self.gripper_is_activated
         self.robot_command_pub.publish(robot_cmd)
+        self.get_logger().info('published robot_cmd')
+
         
     def compute_pd(self, error, last_error, dt):
+        self.get_logger().info('Start computing pd')
       
         derivative = (error - last_error) / dt
       
@@ -255,6 +270,12 @@ def main(args=None):
     node = regelungs_node()
     rclpy.spin(node)
     rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
+
+
 
 if __name__ == '__main__':
     main()
