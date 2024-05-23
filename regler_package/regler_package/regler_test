@@ -1,83 +1,175 @@
+import unittest
 import pytest
-from regelungs_node import regelungs_node
+from unittest.mock import MagicMock, patch
+import rclpy
+from rclpy.node import Node
+from regler_package.regler_node import regelungs_node
 from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
-from std_msgs.msg import Float64, String
+from object_interfaces.msg import ObjectData
+from std_msgs.msg import Float64
+import time
 
-def test_arm_position_callback():
-    node = regelungs_node()
-    msg = RobotPos()
-    msg.pos_x = 1
-    msg.pos_y = 2
-    msg.pos_z = 3
-    node.arm_position_callback(msg)
-    assert node.robot_pos == {'x': 1, 'y': 2, 'z': 3}
+class TestRegelungsNode(unittest.TestCase):
 
-def test_object_position_x_callback():
-    node = regelungs_node()
-    msg = Float64()
-    msg.data = 4
-    node.object_position_x_callback(msg)
-    assert node.object_pos['x'] == 4
+    @classmethod
+    def setUpClass(cls):
+        rclpy.init()
 
-def test_object_position_y_callback():
-    node = regelungs_node()
-    msg = Float64()
-    msg.data = 5
-    node.object_position_y_callback(msg)
-    assert node.object_pos['y'] == 5
+    @classmethod
+    def tearDownClass(cls):
+        rclpy.shutdown()
 
-def test_velocity_callback():
-    node = regelungs_node()
-    msg = Float64()
-    msg.data = 6
-    node.velocity_callback(msg)
-    assert node.velocity == 6
+    def setUp(self):
+        self.node = regelungs_node()
+        self.node.robot_command_pub.publish = MagicMock()
 
-def test_object_class_callback():
-    node = regelungs_node()
-    msg = String()
-    msg.data = 'unicorn'
-    node.calculate_target_position = lambda x, y, z: {'x': 1, 'y': 2, 'z': 3}  # just checking random values
-    node.go_to_target_position = lambda x: None  #same as above
-    node.object_class_callback(msg)
-    assert node.object_class == 'unicorn'
+    def tearDown(self):
+        self.node.destroy_node()
 
-def test_timestamp_object_callback():
-    node = regelungs_node()
-    msg = Float64()
-    msg.data = 7
-    node.timestamp_object_callback(msg)
-    assert node.timestamp_object == 7
+    """
+    Given a newly turned on pick-up-robot and it's initialised the node name should be 'regelungsnode'
+    and all subscriptions and publisher should be not None
+    """
+    def test_init(self):
+        self.assertEqual(self.node.get_name(), 'regelungs_node')
+        self.assertIsNotNone(self.node.arm_positions_sub)
+        self.assertIsNotNone(self.node.object_data_sub)
+        self.assertIsNotNone(self.node.vel_sub)
+        self.assertIsNotNone(self.node.robot_command_pub)
 
-def test_calculate_target_position():
-    node = regelungs_node()
-    object_class = 'unicorn'
-    object_pos = {'x': 1, 'y': 2}
-    timestamp_object = 3
-    target_position = node.calculate_target_position(object_class, object_pos, timestamp_object)
-    assert target_position == {'x': 1, 'y': 2, 'z': 13}
+    """
+    Given a newly turned on pick-up-robot in the initialising prozess the method move_to_zero
+    should determine the zero position and set afterwards the target position to default position
+    """
 
-def test_go_to_target_position():
-    node = regelungs_node()
-    node.target_position = {'x': 1, 'y': 2, 'z': 3}
-    node.robot_pos = {'x': 0, 'y': 0, 'z': 0}
-    node.wait = lambda x: None  #same as above
-    node.go_to_target_position('unicorn')
-    assert node.gripper_is_activated == True
+    def test_move_to_zero_position(self):
+        self.node.robot_pos = {'x': 0, 'y': 0, 'z': 0}
+        self.node.move_to_zero_position()
+        self.assertEqual(self.node.target_position, self.node.default_pos)
+        self.assertNotEqual(self.node.zero_position, {'x': 0, 'y': 0, 'z': 0})
 
-def test_sort():
-    node = regelungs_node()
-    node.gripper_is_activated = True
-    node.go_to_target_position = lambda x: None  # same as above
-    node.sort('cat')
-    assert node.gripper_is_activated == False
+    """
+    given a pick-up-robot and the controller is called it needs to compute pd.
+    Pd should be computed by the conrolling fuormular
+    """
+    def test_compute_pd(self):
+        error = 5.0
+        last_error = 3.0
+        dt = 0.1
+        kp = self.node.kp
+        kd = self.node.kd
 
-def test_regler():
-    node = regelungs_node()
-    node.target_position = {'x': 1, 'y': 2, 'z': 3}
-    node.robot_pos = {'x': 0, 'y': 0, 'z': 0}
-    node.compute_pd = lambda x, y, z, kn: (1, 2)  #same as above
-    node.regler()
+        expected_control_signal = kp * error + kd * (error - last_error) / dt
+        control_signal = self.node.compute_pd(error, last_error, dt)
 
-if __name__ == "__main__":
-    pytest.main()
+        self.assertAlmostEqual(control_signal, expected_control_signal)
+
+    """
+    Given a pick-up-robot and an object and the method sort is called
+    it should check wheter the gripper is activated or not. If the gripper is activated
+    it should set its target pos to the box of the objects class
+    """
+
+    def test_sort(self):
+        self.node.oldest_object['class'] = 'cat'
+        self.node.robot_pos = self.node.box_cat
+        self.node.sort(self.node.oldest_object)
+        self.assertEqual(self.node.target_position, self.node.box_cat)
+        self.assertFalse(self.node.gripper_is_activated)
+
+        self.node.oldest_object['class'] = 'unicorn'
+        self.node.robot_pos = self.node.box_unicorn
+        self.node.sort(self.node.oldest_object)
+        self.assertEqual(self.node.target_position, self.node.box_unicorn)
+        self.assertFalse(self.node.gripper_is_activated)
+
+    """
+    Given a pick-up-robot an a new object is detected it should enqueue the object. The queue should 
+    have the length one.
+    It should  dequeue it and make it to the oldest object.
+    """
+
+    def test_enqueue_dequeue(self):
+        object_data = {'x': 1, 'y': 2, 'class': 'cat', 'timestamp': 123, 'index': 0}
+        self.node.enqueue(object_data)
+        self.assertEqual(len(self.node.queue), 1)
+        self.node.dequeue()
+        self.assertEqual(self.node.oldest_object, object_data)
+        self.assertEqual(len(self.node.queue), 0)
+
+    """
+    Given a pick-up-robot and the method calculate target position is called
+    it should calculate the target position. If the gripper is activated
+    the target position for the cat object should be box_cat
+    and for the unicorn the target position should be box_unicorn. 
+    If the gripper is deactivated and there is an oldest object
+    the target position should be the position of the object.
+    when there is no oldest object the target position should be the default position
+    """
+
+    def test_calculate_target_position(self):
+        self.node.gripper_is_activated = True
+        self.node.oldest_object['timestamp'] = time.time()
+        self.node.velocity = 0.1
+        self.node.oldest_object['x'] = 10
+        self.node.oldest_object['y'] = 10
+
+        self.node.oldest_object['class'] = 'cat'
+        self.node.calculate_target_position()
+        self.assertEqual(self.node.target_position, self.node.box_cat)
+
+        self.controll_target_position = {'x': None, 'y': None, 'z': None}
+        self.node.gripper_is_activated = False
+        self.node.calculate_target_position()
+        self.controll_target_position['x'] = self.node.oldest_object['x'] + self.node.velocity * (time.time() - self.node.oldest_object['timestamp'])
+        self.controll_target_position['y'] = self.node.oldest_object['y']
+        self.controll_target_position['z'] = self.node.pick_up_z
+        self.assertAlmostEqual(self.controll_target_position['x'], self.node.target_position['x'], places = 5)
+        self.assertEqual(self.controll_target_position['y'], self.node.target_position['y'])
+        self.assertEqual(self.controll_target_position['z'], self.node.target_position['z'])
+
+        self.node.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
+        self.node.calculate_target_position()
+        self.assertEqual(self.node.target_position, self.node.default_pos)
+
+    """
+    Given a pick-up-robot an the controller is called
+    """
+
+    def test_regler(self):
+    
+
+        
+        self.node.robot_pos = {'x': 1.0, 'y': 2.0, 'z': 3.0}
+        self.node.target_position = {'x': 4.0, 'y': 5.0, 'z': 6.0}
+        self.node.last_error_x = 0
+        self.node.last_error_y = 0
+        self.node.last_error_z = 0
+        
+        self.node.last_calculation_time = time.time()
+
+        
+        
+        
+        
+        expected_differenz_x = self.node.target_position['x'] - self.node.robot_pos['x']
+        expected_differenz_y = self.node.target_position['y'] - self.node.robot_pos['y']
+        expected_differenz_z = self.node.target_position['z'] - self.node.robot_pos['z']
+        expected_dt = 1.0
+
+        expected_vel_x = self.node.compute_pd(expected_differenz_x, self.node.last_error_x, expected_dt)
+        expected_vel_y = self.node.compute_pd(expected_differenz_y, self.node.last_error_y, expected_dt)
+        expected_vel_z = self.node.compute_pd(expected_differenz_z, self.node.last_error_z, expected_dt)
+
+        
+        
+        
+            
+
+    def test_go_to_target_position(self):
+        pass
+        
+
+if __name__ == '__main__':
+    unittest.main()
+
