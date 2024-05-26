@@ -1,83 +1,69 @@
-import pytest
-from regelungs_node import regelungs_node
+import rclpy
+from rclpy.node import Node
 from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
-from std_msgs.msg import Float64, String
+from object_interfaces.msg import ObjectData
+from std_msgs.msg import Float64
+import time
+import unittest
 
-def test_arm_position_callback():
-    node = regelungs_node()
-    msg = RobotPos()
-    msg.pos_x = 1
-    msg.pos_y = 2
-    msg.pos_z = 3
-    node.arm_position_callback(msg)
-    assert node.robot_pos == {'x': 1, 'y': 2, 'z': 3}
+class TestRegelungsNode(unittest.TestCase):
 
-def test_object_position_x_callback():
-    node = regelungs_node()
-    msg = Float64()
-    msg.data = 4
-    node.object_position_x_callback(msg)
-    assert node.object_pos['x'] == 4
+    def setUp(self):
+        rclpy.init(args=None)
+        self.node = RegelungsNode()
 
-def test_object_position_y_callback():
-    node = regelungs_node()
-    msg = Float64()
-    msg.data = 5
-    node.object_position_y_callback(msg)
-    assert node.object_pos['y'] == 5
+    def tearDown(self):
+        rclpy.shutdown()
 
-def test_velocity_callback():
-    node = regelungs_node()
-    msg = Float64()
-    msg.data = 6
-    node.velocity_callback(msg)
-    assert node.velocity == 6
+    def test_initial_state(self):
+        self.assertEqual(self.node.state, self.node.INIT_STATE)
+    
+    def test_transition_to_idle_state(self):
+        self.node.arm_position_callback(RobotPos(pos_x=0, pos_y=0, pos_z=0))
+        self.assertEqual(self.node.state, self.node.IDLE_STATE)
+    
+    def test_transition_to_ziel_state(self):
+        self.node.queue.append({'x': 1, 'y': 1, 'z': 1, 'class': 'test'})
+        self.node.state = self.node.IDLE_STATE
+        self.node.go_to_target_position()
+        self.assertEqual(self.node.state, self.node.ZIEL_STATE)
+    
+    def test_transition_to_pick_up_state(self):
+        self.node.state = self.node.ZIEL_STATE
+        self.node.target_position = self.node.robot_pos
+        self.node.go_to_target_position()
+        self.assertEqual(self.node.state, self.node.PICK_UP_STATE)
+    
+    def test_transition_to_los_state(self):
+        self.node.state = self.node.PICK_UP_STATE
+        self.node.go_to_target_position()
+        self.assertEqual(self.node.state, self.node.LOS_STATE)
+    
+    def test_transition_to_default_state(self):
+        self.node.state = self.node.LOS_STATE
+        self.node.go_to_target_position()
+        self.assertEqual(self.node.state, self.node.DEFAULT_STATE)
+    
+    def test_emergency_state(self):
+        self.node.emergency_case("Test Emergency")
+        self.assertEqual(self.node.state, self.node.EMERGENCY_STATE)
+        self.node.emergency = False
+        self.node.go_to_target_position()
+        self.assertEqual(self.node.state, self.node.IDLE_STATE)
 
-def test_object_class_callback():
-    node = regelungs_node()
-    msg = String()
-    msg.data = 'unicorn'
-    node.calculate_target_position = lambda x, y, z: {'x': 1, 'y': 2, 'z': 3}  # just checking random values
-    node.go_to_target_position = lambda x: None  #same as above
-    node.object_class_callback(msg)
-    assert node.object_class == 'unicorn'
+    def test_regler_function(self):
+        self.node.target_position = {'x': 5, 'y': 5, 'z': 5}
+        self.node.robot_pos = {'x': 0, 'y': 0, 'z': 0}
+        self.node.regler()
+        self.assertNotEqual(self.node.robot_pos, {'x': 0, 'y': 0, 'z': 0})
 
-def test_timestamp_object_callback():
-    node = regelungs_node()
-    msg = Float64()
-    msg.data = 7
-    node.timestamp_object_callback(msg)
-    assert node.timestamp_object == 7
+    def test_calculate_target_position(self):
+        self.node.oldest_object = {'x': 1, 'y': 1, 'class': 'cat', 'timestamp': time.time()}
+        self.node.velocity = 1
+        self.node.calculate_target_position()
+        self.assertEqual(self.node.target_position['x'], 1 + self.node.velocity * (time.time() - self.node.oldest_object['timestamp']))
+        self.assertEqual(self.node.target_position['y'], 1)
+        self.assertEqual(self.node.target_position['z'], self.node.pick_up_z)
 
-def test_calculate_target_position():
-    node = regelungs_node()
-    object_class = 'unicorn'
-    object_pos = {'x': 1, 'y': 2}
-    timestamp_object = 3
-    target_position = node.calculate_target_position(object_class, object_pos, timestamp_object)
-    assert target_position == {'x': 1, 'y': 2, 'z': 13}
-
-def test_go_to_target_position():
-    node = regelungs_node()
-    node.target_position = {'x': 1, 'y': 2, 'z': 3}
-    node.robot_pos = {'x': 0, 'y': 0, 'z': 0}
-    node.wait = lambda x: None  #same as above
-    node.go_to_target_position('unicorn')
-    assert node.gripper_is_activated == True
-
-def test_sort():
-    node = regelungs_node()
-    node.gripper_is_activated = True
-    node.go_to_target_position = lambda x: None  # same as above
-    node.sort('cat')
-    assert node.gripper_is_activated == False
-
-def test_regler():
-    node = regelungs_node()
-    node.target_position = {'x': 1, 'y': 2, 'z': 3}
-    node.robot_pos = {'x': 0, 'y': 0, 'z': 0}
-    node.compute_pd = lambda x, y, z, kn: (1, 2)  #same as above
-    node.regler()
-
-if __name__ == "__main__":
-    pytest.main()
+if __name__ == '__main__':
+    unittest.main()
