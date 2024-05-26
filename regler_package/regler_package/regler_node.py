@@ -2,15 +2,8 @@ import rclpy
 from rclpy.node import Node
 from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
 from object_interfaces.msg import ObjectData
-from std_msgs.msg import Float64, Float32
+from std_msgs.msg import Float64
 import time
-
-
-
-
-
-    
-
 
 
 class regelungs_node(Node):
@@ -30,7 +23,7 @@ class regelungs_node(Node):
         self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_arm_commands', 10)
 
       
-
+        
      
         self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
         self.object_data = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
@@ -79,7 +72,7 @@ class regelungs_node(Node):
 
         self.queue = []
 
-        
+        self.emergency = False
         
 
            
@@ -281,17 +274,28 @@ class regelungs_node(Node):
         if(len(self.queue) != 0):
             self.oldest_object = self.queue.pop(0)
         
-    def emergency_situation(self, error_message):
-        self.get_logger().info('Fehler: ' + error_message)
+    def emergency_case(self, Fehlermeldung):
+        self.get_logger().info('Fehler: ' + Fehlermeldung)
         self.target_position = self.safe_pos
-        self.regler()
+        self.emergency = True
+        while(self.emergency):
+            self.regler()
+            
         
+
+
 
 def main(args=None):
     rclpy.init(args=args)
     node = regelungs_node()
     rclpy.spin(node)
     rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
+
+
 
 if __name__ == '__main__':
     main()
