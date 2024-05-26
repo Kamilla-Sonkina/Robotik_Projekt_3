@@ -26,9 +26,11 @@ class TestRegelungsNode(unittest.TestCase):
         self.node = regelungs_node()
         self.node.robot_command_pub.publish = MagicMock()
         self.regler_subscriber = self.node.create_subscription(RobotCmd, 'acceleration', self.acceleration_callback, 10)    
+        self.object_data_pub = self.node.create_publisher(ObjectData, 'object_data', 10)
         self.acceleration_x = 0
         self.acceleration_y = 0
         self.acceleration_z = 0
+        self.target_object = {'x': 10, 'y': 10, 'class': 'cat', 'timestamp': time.time, 'index': 1}
 
     def tearDown(self):
         self.node.destroy_node()
@@ -197,6 +199,27 @@ class TestRegelungsNode(unittest.TestCase):
         excepted_pose = self.node.safe_pos
         self.node.emergency_case('Test')
         self.assertEqual(self.node.target_position, excepted_pose)
+
+    def test_full_automation(self):
+        self.target_object = ObjectData()
+        self.target_object.object_pos_x = 10
+        self.target_object.object_pos_y = 10
+        self.target_object.object_class = 'cat'
+        self.target_object.timestamp_value = time.time
+        self.target_object.index_value = 1
+        self.object_data_pub.publish(self.target_object)
+        self.node.robot_pos['z'] = self.node.pick_up_z
+        self.assertEqual(self.node.target_position['x'], self.node.box_cat['x'])
+        self.assertEqual(self.node.target_position['y'], self.node.box_cat['y'])
+        self.assertEqual(self.node.target_position['z'], self.node.box_cat['z'])
+        self.node.robot_pos['x'] = self.node.target_position['x']
+        self.node.robot_pos['y'] = self.node.target_position['y']
+        self.node.robot_pos['z'] = self.node.target_position['z']
+
+
+        
+        self.assertEqual(self.node.target_position['x'], self.target_object['x'])
+        self.assertEqual(self.node.target_position['y'], self.target_object['y'])
 
 if __name__ == '__main__':
     unittest.main()
