@@ -82,7 +82,9 @@ class regelungs_node(Node):
         self.target_position['x'] = self.default_pos['x']
         self.target_position['y'] = self.default_pos['y']
         self.target_position['z'] = self.default_pos['z']
-        self.regler()
+        self.go_to_target_position()
+        
+
 
       
 
@@ -149,8 +151,13 @@ class regelungs_node(Node):
         self.object_data[1][0] = msg.object_class
         self.object_data[2][0] = msg.timestamp_value
         self.object_data[3][0] = msg.index_value
-
         self.enqueue(self.object_data)
+
+        if(self.queue.len == 1):
+            self.dequeue()
+        
+
+        
        
 
     def velocity_callback(self, msg):
@@ -181,21 +188,31 @@ class regelungs_node(Node):
         else: 
             self.target_position = self.default_pos
         
-        return self.target_position
+        self.go_to_target_position()
        
 
     async def go_to_target_position(self):
         self.get_logger().info('Start going to target position')
        
-        while((abs(self.target_position - self.robot_pos)) >= 0.5): # oder while(MOVING_STATE == True):
+        if((abs(self.target_position['x'] - self.robot_pos['x'])) >= 0.5
+           and abs(self.target_position['y'] - self.robot_pos['y']) >= 0.5
+           and abs(self.target_position['z'] - self.robot_pos['z']) >= 0.5): # oder while(MOVING_STATE == True):
             self.regler()
             self.go_to_target_position()
 
-        if(abs(self.target_position - self.box_cat) >= 0.5 or abs(self.target_position - self.box_unicorn) >= 0.5): # oder if(OVER_BOX):
+        if((abs(self.target_position['x'] - self.box_cat['x']) >= 0.5 
+            and abs(self.target_position['y'] - self.box_cat['y']) >= 0.5)
+            or (abs(self.target_position['x'] - self.box_unicorn['x']) >= 0.5 
+            and abs(self.target_position['y'] - self.box_unicorn['y']) >= 0.5)): # oder if(OVER_BOX):
             self.gripper_is_activated = False
             self.regler()
-            self.go_to_target_position(self.default_pos)
-        elif(abs(self.target_position - self.default_pos) >= 0.5): # oder elif(DEFAULT_STATE):
+            self.calculate_target_position()
+        elif((abs(self.target_position['x'] - self.default_pos['x']) >= 0.5 
+             and abs(self.target_position['y'] - self.default_pos['y']) >= 0.5
+             and abs(self.target_position['z'] - self.default_pos['z']) >= 0.5)
+             or (abs(self.target_position['x'] - self.safe_pos['x']) >= 0.5 
+             and abs(self.target_position['y'] - self.safe_pos['y']) >= 0.5
+             and abs(self.target_position['z'] - self.safe_pos['z']) >= 0.5)): # oder elif(DEFAULT_STATE):
             await(5)
         else:
             if(abs(self.robot_pos['z'] - self.pick_up_z) >= 0.5): # oder if(PICK_UP_READY_STATE)
@@ -203,9 +220,9 @@ class regelungs_node(Node):
                 self.regler()
                 self.sort(self.oldest_object['class'])
             else:
-                self.robot_pos['z'] = self.pick_up_z
+                self.target_position['z'] = self.pick_up_z
                 self.regler()
-                self.calculate_target_position()
+                self.go_to_target_position()
        
     def sort(self, oldest_object):
         self.get_logger().info('Start sorting')
@@ -273,6 +290,7 @@ class regelungs_node(Node):
     def dequeue(self):
         if(len(self.queue) != 0):
             self.oldest_object = self.queue.pop(0)
+            self.go_to_target_position()
         
     def emergency_case(self, Fehlermeldung):
         self.get_logger().info('Fehler: ' + Fehlermeldung)
@@ -294,11 +312,6 @@ def main(args=None):
 if __name__ == '__main__':
     main()
 
-
-
-
-if __name__ == '__main__':
-    main()
 
 
 
