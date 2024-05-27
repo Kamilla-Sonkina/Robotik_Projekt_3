@@ -7,8 +7,16 @@ import time
 
 
 class regelungs_node(Node):
+    INIT_STATE = "Initialisierung"
+    IDLE_STATE = "Idle"
+    ZIEL_STATE = "Ziel"
+    PICK_UP_STATE = "Pick_Up"
+    LOS_STATE = "Los"
+    DEFAULT_STATE = "Default"
+    EMERGENCY_STATE = "Emergency"
     def __init__(self):
         super().__init__('regelungs_node')
+        self.state = self.INIT_STATE
 
         self.get_logger().info('Start initializing')
 
@@ -53,6 +61,7 @@ class regelungs_node(Node):
         self.safe_pos['z'] += self.zero_position['z']
 
         self.pick_up_z = self.zero_position['z'] + 13
+        self.ready_to_pick_up_z = self.zero_position['z'] + 12
         self.gripper_is_activated = False
         self.target_position = {'x': None, 'y': None, 'z': None}
         self.corner = {'x': -10000, 'y': -10000, 'z': -1000}
@@ -182,7 +191,7 @@ class regelungs_node(Node):
         elif(self.gripper_is_activated is False) and (self.oldest_object['class'] is not None):
             self.target_position['x'] = self.oldest_object['x'] + self.velocity * (time.time() - self.oldest_object['timestamp'])
             self.target_position['y'] = self.oldest_object['y']
-            self.target_position['z'] = self.pick_up_z
+            self.target_position['z'] = self.ready_to_pick_up_z
 
 
         else: 
@@ -215,12 +224,13 @@ class regelungs_node(Node):
              and abs(self.target_position['z'] - self.safe_pos['z']) >= 0.5)): # oder elif(DEFAULT_STATE):
             await(5)
         else:
-            if(abs(self.robot_pos['z'] - self.pick_up_z) >= 0.5): # oder if(PICK_UP_READY_STATE)
+            if(abs(self.robot_pos['z'] - self.ready_to_pick_up_z) >= 0.5): # oder if(PICK_UP_READY_STATE)
                 self.gripper_is_activated = True
+                self.target_position['z'] = self.pick_up_z
                 self.regler()
                 self.sort(self.oldest_object['class'])
             else:
-                self.target_position['z'] = self.pick_up_z
+                self.target_position['z'] = self.ready_to_pick_up_z
                 self.regler()
                 self.go_to_target_position()
        
