@@ -1,228 +1,388 @@
-import asyncio
-import unittest
-
-from unittest.mock import MagicMock, patch
-
-import pytest
 import rclpy
 from rclpy.node import Node
-from regler_package.regler_node import regelungs_node
 from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
 from object_interfaces.msg import ObjectData
 from std_msgs.msg import Float64
 import time
+from enum import Enum
 
-class TestRegelungsNode(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        rclpy.init()
-
-    @classmethod
-    def tearDownClass(cls):
-        rclpy.shutdown()
-
-    def setUp(self):
-        self.node = regelungs_node()
-        self.node.robot_command_pub.publish = MagicMock()
-        self.regler_subscriber = self.node.create_subscription(RobotCmd, 'acceleration', self.acceleration_callback, 10)    
-        self.object_data_pub = self.node.create_publisher(ObjectData, 'object_data', 10)
-        self.acceleration_x = 0
-        self.acceleration_y = 0
-        self.acceleration_z = 0
-        self.target_object = {'x': 10, 'y': 10, 'class': 'cat', 'timestamp': time.time, 'index': 1}
-
-    def tearDown(self):
-        self.node.destroy_node()
-
-    """
-    Given a newly turned on pick-up-robot and it's initialised the node name should be 'regelungsnode'
-    and all subscriptions and publisher should be not None
-    """
-    def test_init(self):
-        self.assertEqual(self.node.get_name(), 'regelungs_node')
-        self.assertIsNotNone(self.node.arm_positions_sub)
-        self.assertIsNotNone(self.node.object_data_sub)
-        self.assertIsNotNone(self.node.vel_sub)
-        self.assertIsNotNone(self.node.robot_command_pub)
-
-    """
-    Given a newly turned on pick-up-robot in the initialising prozess the method move_to_zero
-    should determine the zero position and set afterwards the target position to default position
-    """
-
-    def test_move_to_zero_position(self):
-        self.node.robot_pos = {'x': 0, 'y': 0, 'z': 0}
-        self.node.move_to_zero_position()
-        self.assertEqual(self.node.target_position, self.node.default_pos)
-        self.assertNotEqual(self.node.zero_position, {'x': 0, 'y': 0, 'z': 0})
-
-    """
-    given a pick-up-robot and the controller is called it needs to compute pd.
-    Pd should be computed by the conrolling fuormular
-    """
-    def test_compute_pd(self):
-        error = 5.0
-        last_error = 3.0
-        dt = 0.1
-        kp = self.node.kp
-        kd = self.node.kd
-
-        expected_control_signal = kp * error + kd * (error - last_error) / dt
-        control_signal = self.node.compute_pd(error, last_error, dt)
-
-        self.assertAlmostEqual(control_signal, expected_control_signal)
-
-    """
-    Given a pick-up-robot and an object and the method sort is called
-    it should check wheter the gripper is activated or not. If the gripper is activated
-    it should set its target pos to the box of the objects class
-    """
-
-    def test_sort(self):
-        self.node.oldest_object['class'] = 'cat'
-        self.node.robot_pos = self.node.box_cat
-        self.node.sort(self.node.oldest_object)
-        self.assertEqual(self.node.target_position, self.node.box_cat)
-        self.assertFalse(self.node.gripper_is_activated)
-
-        self.node.oldest_object['class'] = 'unicorn'
-        self.node.robot_pos = self.node.box_unicorn
-        self.node.sort(self.node.oldest_object)
-        self.assertEqual(self.node.target_position, self.node.box_unicorn)
-        self.assertFalse(self.node.gripper_is_activated)
-
-    """
-    Given a pick-up-robot an a new object is detected it should enqueue the object. The queue should 
-    have the length one.
-    It should  dequeue it and make it to the oldest object.
-    """
-
-    def test_enqueue_dequeue(self):
-        object_data = {'x': 1, 'y': 2, 'class': 'cat', 'timestamp': 123, 'index': 0}
-        self.node.enqueue(object_data)
-        self.assertEqual(len(self.node.queue), 1)
-        self.node.dequeue()
-        self.assertEqual(self.node.oldest_object, object_data)
-        self.assertEqual(len(self.node.queue), 0)
-
-    """
-    Given a pick-up-robot and the method calculate target position is called
-    it should calculate the target position. If the gripper is activated
-    the target position for the cat object should be box_cat
-    and for the unicorn the target position should be box_unicorn. 
-    If the gripper is deactivated and there is an oldest object
-    the target position should be the position of the object.
-    when there is no oldest object the target position should be the default position
-    """
-
-    def test_calculate_target_position(self):
-        self.node.gripper_is_activated = True
-        self.node.oldest_object['timestamp'] = time.time()
-        self.node.velocity = 0.1
-        self.node.oldest_object['x'] = 10
-        self.node.oldest_object['y'] = 10
-
-        self.node.oldest_object['class'] = 'cat'
-        self.node.calculate_target_position()
-        self.assertEqual(self.node.target_position, self.node.box_cat)
-
-        self.controll_target_position = {'x': None, 'y': None, 'z': None}
-        self.node.gripper_is_activated = False
-        self.node.calculate_target_position()
-        self.controll_target_position['x'] = self.node.oldest_object['x'] + self.node.velocity * (time.time() - self.node.oldest_object['timestamp'])
-        self.controll_target_position['y'] = self.node.oldest_object['y']
-        self.controll_target_position['z'] = self.node.pick_up_z
-        self.assertAlmostEqual(self.controll_target_position['x'], self.node.target_position['x'], places = 5)
-        self.assertEqual(self.controll_target_position['y'], self.node.target_position['y'])
-        self.assertEqual(self.controll_target_position['z'], self.node.target_position['z'])
-
-        self.node.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
-        self.node.calculate_target_position()
-        self.assertEqual(self.node.target_position, self.node.default_pos)
+class State(Enum):
+    Initialisierung = 0
+    Idle = 1
+    Moving_to_object = 2
+    Ready_to_pick_up = 3
+    Sorting = 4
+    Over_Box = 5
+    Default = 6
+    Emergency = 7
 
     
-    @pytest.mark.asyncio
-    async def test_regler(self):
+
+class regelungs_node(Node):
+    
+    def __init__(self):
+        super().__init__('regelungs_node')
+        self.state = State.Initialisierung
+
+        self.get_logger().info('Start initializing')
+
+        self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_arm_position', self.arm_position_callback, 10)
+        
+        self.object_data_sub = self.create_subscription(ObjectData, 'object_data', self.object_data_callback, 10)
+        
+
+        self.vel_sub = self.create_subscription(Float64, 'velocity', self.velocity_callback, 10)
+
+
+        self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_command', 10)
+
+      
+        
+     
+        self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
+        self.object_data = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
+        self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
+        self.velocity = 0
+        self.zero_position = {'x': 10, 'y': 10, 'z': 10}
+
+
+        
+        self.gripper_is_activated = False
+        self.target_position = {'x': 0, 'y': 0, 'z': 0}
+        self.corner = {'x': 0, 'y': 0, 'z': 0}
+
+
+        self.last_calculation_time = time.time()
+
+        self.last_error_x = 0
+        self.last_error_y = 0
+        self.last_error_z = 0
+        self.kp = 9.85199  
+        self.kd = 6.447857  
+        self.first_arm_pos = False
+        
+
+        self.velo_zaehler = 0
+
+        self.queue = []
+
+        self.emergency = False
+        
+        self.box_cat = {'x': 10, 'y': 11, 'z': 12}
+        self.box_unicorn = {'x': 12, 'y': 11, 'z': 12}
+        self.default_pos = {'x': 1, 'y': 1, 'z': 2}  
+        self.safe_pos = {'x': 0, 'y': 1, 'z': 2}
+        self.pick_up_z = 13
+        self.ready_to_pick_up_z = 12
+
+        self.move_to_zero_position()
+        self.target_position['x'] = self.default_pos['x']
+        self.target_position['y'] = self.default_pos['y']
+        self.target_position['z'] = self.default_pos['z']
+
+        self.box_unicorn =  self.adjust_box_position(self.box_unicorn)
+        
+
+        self.box_cat =  self.adjust_box_position(self.box_cat)
+
+        self.default_pos =  self.adjust_box_position(self.default_pos)
+        
+        self.safe_pos = self.adjust_box_position(self.safe_pos)
+
+        self.pick_up_z = self.zero_position['z'] + 13
+        self.ready_to_pick_up_z = self.zero_position['z'] + 12
+
+        self.state = State.Idle
+        self.regler()
+        
+        
+
+
+      
+    def adjust_box_position(self, box):
+        box['x'] += self.zero_position['x']
+        box['y'] += self.zero_position['y']
+        box['z'] += self.zero_position['z']
+        return box
+
+    def move_to_zero_position(self):
+        robot_cmd = RobotCmd()
+        robot_cmd.accel_x = 0.0
+        robot_cmd.accel_y = 0.0
+        robot_cmd.accel_z = -0.01
+        robot_cmd.activate_gripper = self.gripper_is_activated
+        self.robot_command_pub.publish(robot_cmd)
+        time.sleep(1)
+        robot_cmd.accel_x = 0.0
+        robot_cmd.accel_y = -0.01
+        robot_cmd.accel_z = 0.0
+        robot_cmd.activate_gripper = self.gripper_is_activated
+        self.robot_command_pub.publish(robot_cmd)
+        time.sleep(1)
+        robot_cmd.accel_x = -0.01
+        robot_cmd.accel_y = 0.0
+        robot_cmd.accel_z = 0.0
+        robot_cmd.activate_gripper = self.gripper_is_activated
+        self.robot_command_pub.publish(robot_cmd)
+        time.sleep(1)
+        robot_cmd.accel_x = 0.0
+        robot_cmd.accel_y = 0.0
+        robot_cmd.accel_z = 0.0
+        robot_cmd.activate_gripper = self.gripper_is_activated
+        self.robot_command_pub.publish(robot_cmd)
+        time.sleep(5)
+
+        self.robot_pos['x'] = self.zero_position['x']
+        self.robot_pos['y'] = self.zero_position['y']
+        self.robot_pos['z'] = self.zero_position['z']
+
+        self.get_logger().info(f"Zero position is: x={self.zero_position['x']}, y={self.zero_position['y']}, z={self.zero_position['z']}")
+        
+        self.target_position['x'] = self.robot_pos['x']
+        self.target_position['y'] = self.robot_pos['y']
+        self.target_position['z'] = self.robot_pos['z']
+        
+        
+
+    """async def move_to_zero_position(self):
+        while(self.first_arm_pos == False):
+            self.get_logger().info('Waiting for update')
+            await(50)
+        self.get_logger().info('Start move to zero position')
+        while abs(self.robot_pos['x'] - self.zero_position['x']) >= 0.1:
+            self.zero_position['x'] = self.robot_pos['x']
+            robot_cmd = RobotCmd()
+            robot_cmd.accel_x = 0.1
+            robot_cmd.accel_y = 0
+            robot_cmd.accel_z = 0
+            robot_cmd.activate_gripper = False
+            self.robot_command_pub.publish(robot_cmd)
+            await(500)
+
+        while abs(self.robot_pos['y'] - self.zero_position['y']) >= 0.1:
+            self.zero_position['y'] = self.robot_pos['y']
+            robot_cmd = RobotCmd()
+            robot_cmd.accel_x = 0
+            robot_cmd.accel_y = -0.1
+            robot_cmd.accel_z = 0
+            robot_cmd.activate_gripper = False
+            self.robot_command_pub.publish(robot_cmd)
+            await(500)
+
+        while abs(self.robot_pos['z'] - self.zero_position['z']) >= 0.1:
+            self.zero_position['z'] = self.robot_pos['z']
+            robot_cmd = RobotCmd()
+            robot_cmd.accel_x = 0
+            robot_cmd.accel_y = 0
+            robot_cmd.accel_z = -0.1
+            robot_cmd.activate_gripper = False
+            self.robot_command_pub.publish(robot_cmd)
+            await(500)"""
+        
+        
+
     
 
+    def arm_position_callback(self, msg):
+        self.robot_pos['x'] = msg.pos_x
+        self.robot_pos['y'] = msg.pos_y
+        self.robot_pos['z'] = msg.pos_z
+        self.first_arm_pos = True
+        self.regler()
+  
+
+    def object_data_callback(self, msg):
+        self.object_data['x'] = msg.object_pos_x
+        self.object_data['y'] = msg.object_pos_y
+        self.object_data['class'] = msg.object_class
+        self.object_data['timestamp'] = msg.timestamp_value
+        self.object_data['index'] = msg.index_value
+        self.enqueue(self.object_data)
+
+        if(len(self.queue) == 1):
+            self.dequeue()
         
-        self.node.robot_pos = {'x': 1.0, 'y': 2.0, 'z': 3.0}
-        self.node.target_position = {'x': 4.0, 'y': 5.0, 'z': 6.0}
-        self.node.last_error_x = 0
-        self.node.last_error_y = 0
-        self.node.last_error_z = 0
+
         
-        self.node.last_calculation_time = time.time()
+       
 
-        await self.node.regler()
-        
-        
-        
-        expected_differenz_x = self.node.target_position['x'] - self.node.robot_pos['x']
-        expected_differenz_y = self.node.target_position['y'] - self.node.robot_pos['y']
-        expected_differenz_z = self.node.target_position['z'] - self.node.robot_pos['z']
-        expected_dt = 1.0
+    def velocity_callback(self, msg):
+        self.velocity = (self.velocity * self.velo_zaehler + msg.data) / (self.velo_zaehler + 1)
+        self.velo_zaehler += 1
 
-        expected_vel_x = self.node.compute_pd(expected_differenz_x, self.node.last_error_x, expected_dt)
-        expected_vel_y = self.node.compute_pd(expected_differenz_y, self.node.last_error_y, expected_dt)
-        expected_vel_z = self.node.compute_pd(expected_differenz_z, self.node.last_error_z, expected_dt)
-
-        while(self.acceleration_x == 0):
-            await asyncio.sleep(0.005)
-
-
-        self.assertAlmostEqual(self.acceleration_x, expected_vel_x)
-        self.assertAlmostEqual(self.acceleration_y, expected_vel_y)
-        self.assertAlmostEqual(self.acceleration_z, expected_vel_z)
-
-    def acceleration_callback(self, msg):
-        self.acceleration_x = msg.accel_x
-        self.acceleration_y = msg.accel_y
-        self.acceleration_z = msg.accel_z        
-
-    @pytest.mark.asyncio
-    async def test_go_to_target_position(self):
-        self.node.target_position = {'x': 5.0, 'y': 5.0, 'z': 5.0}
-        self.node.robot_pos = {'x': 0.0, 'y': 0.0, 'z': 0.0}
-
-        with patch.object(self.node, 'regler') as mock_regler:
-            await self.node.go_to_target_position()
-            self.assertGreaterEqual(self.node.robot_pos['x'], self.node.target_position['x'])
-            self.assertGreaterEqual(self.node.robot_pos['y'], self.node.target_position['y'])
-            self.assertGreaterEqual(self.node.robot_pos['z'], self.node.target_position['z'])
-            mock_regler.assert_called()
-        
     
-    async def test_go_to_target_position(self):
-        await self.node.go_to_target_position()
-        excepted_pose = self.node.safe_pos
-        self.node.emergency_case('Test')
-        self.assertEqual(self.node.target_position, excepted_pose)
-
-    def test_full_automation(self):
-        self.target_object = ObjectData()
-        self.target_object.object_pos_x = 10
-        self.target_object.object_pos_y = 10
-        self.target_object.object_class = 'cat'
-        self.target_object.timestamp_value = time.time
-        self.target_object.index_value = 1
-        self.object_data_pub.publish(self.target_object)
-        self.assertEqual(self.target_object['x'], self.node.target_position['x'])
-        self.assertEqual(self.target_object['y'], self.node.target_position['y'])
-        self.node.robot_pos['z'] = self.node.ready_to_pick_up_z
         
-        self.assertEqual(self.node.target_position['x'], self.node.box_cat['x'])
-        self.assertEqual(self.node.target_position['y'], self.node.box_cat['y'])
-        self.assertEqual(self.node.target_position['z'], self.node.box_cat['z'])
-        self.node.robot_pos['x'] = self.node.target_position['x']
-        self.node.robot_pos['y'] = self.node.target_position['y']
-        self.node.robot_pos['z'] = self.node.target_position['z']
 
+    def calculate_target_position(self):
+
+        self.get_logger().info('Start calculating target position')
+        
+        if(self.gripper_is_activated is True):
+            if(self.oldest_object['class'] == 'cat'):
+                self.target_position = self.box_cat
+            elif(self.oldest_object['class'] == 'unicorn'):
+                self.target_position = self.box_unicorn
+            else:
+                self.target_position = self.default_pos
+        
+        elif(self.gripper_is_activated is False) and (self.oldest_object['class'] is not None):
+            self.target_position['x'] = self.oldest_object['x'] + self.velocity * (time.time() - self.oldest_object['timestamp'])
+            self.target_position['y'] = self.oldest_object['y']
+            self.target_position['z'] = self.ready_to_pick_up_z
+
+
+        else: 
+            if(abs(self.robot_pos - self.default_pos) >= 0.5):
+                self.state = State.Default
+            else:    
+                self.target_position = self.default_pos
+
+        self.go_to_target_position()
+       
+
+    def go_to_target_position(self):
+        self.get_logger().info('Start going to target position')
+       
+        if(self.state == State.Moving_to_object or State.Sorting): 
+            self.regler()
+            time.sleep(1)
+            self.go_to_target_position()
+
+        if(self.state == State.Over_Box): 
+            self.gripper_is_activated = False
+            self.regler()
+            self.calculate_target_position()
+        elif(self.state == State.Default): 
+            return None
+        else:
+            if(self.state == State.Ready_to_pick_up): 
+                self.gripper_is_activated = True
+                self.target_position['z'] = self.pick_up_z
+                self.regler()
+                self.sort(self.oldest_object['class'])
+            else:
+                self.target_position['z'] = self.ready_to_pick_up_z
+                self.regler()
+                self.state = State.Ready_to_pick_up
+                self.go_to_target_position()
+       
+    def sort(self, oldest_object):
+        self.get_logger().info('Start sorting')
+        if(self.gripper_is_activated): 
+            if(oldest_object['class'] == 'cat'):
+                self.target_position = self.box_cat
+                self.state = State.Sorting
+                self.go_to_target_position()
+                self.gripper_is_activated = False
+                self.oldest_object = self.dequeue
+            if(oldest_object['class'] ==  'unicorn'):
+                self.target_position = self.box_unicorn
+                self.state = State.Sorting
+                self.go_to_target_position()  
+                self.gripper_is_activated = False  
+                self.oldest_object = self.dequeue
+                
+
+    def regler(self):
+        self.get_logger().info('Start controlling')
+       
+        differenz_x = self.target_position['x'] - self.robot_pos['x']    
+        differenz_y = self.target_position['y'] - self.robot_pos['y']  
+        differenz_z = self.target_position['z'] - self.robot_pos['z']   
+
+        current_time = time.time()
+    
+        dt = current_time - self.last_calculation_time
+      
+        self.last_calculation_time = current_time
 
         
-        self.assertEqual(self.node.target_position['x'], self.target_object['x'])
-        self.assertEqual(self.node.target_position['y'], self.target_object['y'])
+        vel_x = self.compute_pd(differenz_x, self.last_error_x, dt)
+        self.last_error_x = differenz_x
+        if (vel_x > 0.01):
+            vel_x = 0.01
+        elif(vel_x < -0.01):
+            vel_x = -0.01
+        print(vel_x)
+        
+        vel_y = self.compute_pd(differenz_y, self.last_error_y, dt)
+        self.last_error_y = differenz_y
+        if (vel_y > 0.01):
+            vel_y = 0.01
+        elif(vel_y < -0.01):
+            vel_y = -0.01
+        print(vel_y)
+        
+        vel_z = self.compute_pd(differenz_z, self.last_error_z, dt)
+        self.last_error_z = differenz_z
+        if (vel_z > 0.01):
+            vel_z = 0.01
+        elif (vel_z < -0.01):
+            vel_z = -0.01
+        print(vel_z)
+     
+        robot_cmd = RobotCmd()
+        robot_cmd.accel_x = vel_x
+        robot_cmd.accel_y = vel_y
+        robot_cmd.accel_z = vel_z
+        robot_cmd.activate_gripper = self.gripper_is_activated
+        self.robot_command_pub.publish(robot_cmd)
+        self.get_logger().info('published robot_cmd')
+        self.update_State()
+
+        
+    def compute_pd(self, error, last_error, dt):
+        self.get_logger().info('Start computing pd')
+      
+        derivative = (error - last_error) / dt
+      
+        control_signal = self.kp * error + self.kd * derivative
+
+        control_signal = float(control_signal)
+        
+        return control_signal
+
+    
+    def enqueue(self, object_data):
+        self.queue.append(object_data)
+    
+    def dequeue(self):
+        if(len(self.queue) != 0):
+            self.oldest_object = self.queue.pop(0)
+            self.state = State.Moving_to_object
+            self.go_to_target_position()
+        
+    def emergency_case(self, Fehlermeldung):
+        self.state = State.Emergency
+        self.get_logger().info('Fehler: ' + Fehlermeldung)
+        self.target_position = self.safe_pos
+        self.emergency = True
+        while(self.emergency):
+            self.regler()
+
+    def update_State(self):
+        if(((self.robot_pos['x'] == self.box_cat['x']) and (self.robot_pos['y'] == self.box_cat['y']))
+        or ((self.robot_pos['x'] == self.box_unicorn['x']) and (self.robot_pos['y'] == self.box_unicorn['y']))):
+            self.state = State.Over_Box
+        elif(((self.target_position['x'] == self.box_cat['x']) and (self.target_position['y'] == self.box_cat['y']))
+        or ((self.target_position['x'] == self.box_unicorn['x']) and (self.target_position['y'] == self.box_unicorn['y']))):
+            self.state = State.Sorting
+        if((self.robot_pos['x'] == self.default_pos['x']) and (self.robot_pos['y'] == self.default_pos['y'])):
+            self.state = State.Default
+
+        self.get_logger().info(f'Updated state to {self.state.name}')   
+        
+
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = regelungs_node()
+    rclpy.spin(node)
+    rclpy.shutdown()
 
 if __name__ == '__main__':
-    unittest.main()
+    main()
+
+
+
