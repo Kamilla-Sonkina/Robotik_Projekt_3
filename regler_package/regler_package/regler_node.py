@@ -27,7 +27,7 @@ class regelungs_node(Node):
 
         self.get_logger().info('Start initializing')
 
-        self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_arm_position', self.arm_position_callback, 10)
+        self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_position', self.arm_position_callback, 10)
         
         self.object_data_sub = self.create_subscription(ObjectData, 'object_data', self.object_data_callback, 10)
         
@@ -219,18 +219,19 @@ class regelungs_node(Node):
        
 
     def go_to_target_position(self):
-        self.get_logger().info('Start going to target position')
+        self.get_logger().info(f"going from robot position x:{self.robot_pos['x']}, y: {self.robot_pos['y']}, z: {self.robot_pos['z']}")
+        self.get_logger().info(f"Start going to target position x:{self.target_position['x']}, y: {self.target_position['y']}, z: {self.target_position['z']}")
        
         if(self.state == State.Moving_to_object or State.Sorting): 
             self.regler()
             time.sleep(1)
-            self.go_to_target_position()
+            #self.go_to_target_position()
             
 
         if(self.state == State.Over_Box): 
             self.gripper_is_activated = False
             self.regler()
-            self.calculate_target_position()
+            #self.calculate_target_position()
         elif(self.state == State.Default): 
             return None
         else:
@@ -344,20 +345,34 @@ class regelungs_node(Node):
         if(((self.robot_pos['x'] == self.box_cat['x']) and (self.robot_pos['y'] == self.box_cat['y']))
         or ((self.robot_pos['x'] == self.box_unicorn['x']) and (self.robot_pos['y'] == self.box_unicorn['y']))):
             self.state = State.Over_Box
+            return None
         elif(((self.target_position['x'] == self.box_cat['x']) and (self.target_position['y'] == self.box_cat['y']))
         or ((self.target_position['x'] == self.box_unicorn['x']) and (self.target_position['y'] == self.box_unicorn['y']))):
             self.state = State.Sorting
+            self.get_logger().info(f'Updated state to {self.state.name}')  
+            return None
         if((self.robot_pos['x'] == self.default_pos['x']) and (self.robot_pos['y'] == self.default_pos['y'])):
             self.state = State.Default
+            self.get_logger().info(f'Updated state to {self.state.name}')  
+            return None
         elif(((self.robot_pos['x'] == self.target_position['x']) and (self.robot_pos['y'] == self.target_position['y']))
              and self.robot_pos['z'] == self.ready_to_pick_up_z):
             self.state = State.Ready_to_pick_up
-        if((self.target_position['x'] == self.robot_pos['x']) 
-        and (self.target_position['y'] == self.robot_pos['y']) 
-        and (self.target_position['z'] == self.robot_pos['z'])
+            self.get_logger().info(f'Updated state to {self.state.name}')  
+            return None
+        elif(((self.robot_pos['x'] == self.target_position['x']) and (self.robot_pos['y'] == self.target_position['y']))
+             and self.robot_pos['z'] == self.target_position['z']):
+            self.state = State.Idle
+            self.get_logger().info(f'Updated state to {self.state.name}')  
+            return None
+        if((self.target_position['x'] != self.robot_pos['x']) 
+        and (self.target_position['y'] != self.robot_pos['y']) 
+        and (self.target_position['z'] != self.robot_pos['z'])
         and self.gripper_is_activated == False):
             self.state = State.Moving_to_object
-        self.get_logger().info(f'Updated state to {self.state.name}')   
+            
+        
+            self.get_logger().info(f'Updated state to {self.state.name}')   
         
 
 
@@ -370,6 +385,8 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
+
 
 
 
