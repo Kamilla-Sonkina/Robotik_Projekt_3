@@ -25,34 +25,22 @@ class regelungs_node(Node):
         super().__init__('regelungs_node')
         self.state = State.Initialisierung
 
+        
         self.get_logger().info('Start initializing')
-
-        self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_position', self.arm_position_callback, 10)
-        
         self.object_data_sub = self.create_subscription(ObjectData, 'object_data', self.object_data_callback, 10)
-        
-
-        self.vel_sub = self.create_subscription(Float64, 'velocity', self.velocity_callback, 10)
-
-
-        self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_command', 10)
-
         self.target_pos_sub = self.create_subscription(TargetPose, 'target_position', self.target_position_callback, 10)
-        
-     
+        self.vel_sub = self.create_subscription(Float64, 'velocity', self.velocity_callback, 10)
+        self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_position', self.arm_position_callback, 10)
+        self.last_msg_time = 0
+        self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_command', 10)
         self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
         self.object_data = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
         self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
         self.velocity = 0
         self.zero_position = {'x': 10, 'y': 10, 'z': 10}
-
-
-        
         self.gripper_is_activated = False
-        self.target_position = {'x': 0, 'y': 0, 'z': 0}
+        self.target_position = {'x': None, 'y': None, 'z': None}
         self.corner = {'x': 0, 'y': 0, 'z': 0}
-
-
         self.last_calculation_time = time.time()
 
         self.last_error_x = 0
@@ -60,7 +48,7 @@ class regelungs_node(Node):
         self.last_error_z = 0
         self.kp = 9.85199  
         self.kd = 6.447857  
-        self.first_arm_pos = False
+        self.first_arm_pos = 0
         
         self.user_target = False
         self.velo_zaehler = 0
@@ -73,29 +61,19 @@ class regelungs_node(Node):
         self.box_unicorn = {'x': 12, 'y': 11, 'z': 12}
         self.default_pos = {'x': 1, 'y': 1, 'z': 2}  
         self.safe_pos = {'x': 0, 'y': 1, 'z': 2}
-        self.pick_up_z = 13
-        self.ready_to_pick_up_z = 12
-
+        self.pick_up_z = 0.0  #0.0068
+        self.ready_to_pick_up_z = 0.0 #0.0067
+        self.last_msg_time = time.time()
         self.move_to_zero_position()
-        self.target_position['x'] = self.default_pos['x']
+        """self.target_position['x'] = self.default_pos['x']
         self.target_position['y'] = self.default_pos['y']
-        self.target_position['z'] = self.default_pos['z']
+        self.target_position['z'] = self.default_pos['z']"""
 
-        self.box_unicorn =  self.adjust_box_position(self.box_unicorn)
         
-
-        self.box_cat =  self.adjust_box_position(self.box_cat)
-
-        self.default_pos =  self.adjust_box_position(self.default_pos)
-        
-        self.safe_pos = self.adjust_box_position(self.safe_pos)
-
-        self.pick_up_z = self.zero_position['z'] + 13
-        self.ready_to_pick_up_z = self.zero_position['z'] + 12
 
         self.state = State.Idle
-        self.regler()
-        
+        #self.regler()
+        self.get_logger().info('initializing finished')
         
 
 
@@ -131,17 +109,10 @@ class regelungs_node(Node):
         robot_cmd.accel_z = 0.0
         robot_cmd.activate_gripper = self.gripper_is_activated
         self.robot_command_pub.publish(robot_cmd)
-        time.sleep(5)
+        time.sleep(15)
 
-        self.zero_position['x'] = self.robot_pos['x']
-        self.zero_position['y'] = self.robot_pos['y']
-        self.zero_position['z'] = self.robot_pos['z'] 
-
-        self.get_logger().info(f"Zero position is: x={self.zero_position['x']}, y={self.zero_position['y']}, z={self.zero_position['z']}")
         
-        self.target_position['x'] = self.robot_pos['x']
-        self.target_position['y'] = self.robot_pos['y']
-        self.target_position['z'] = self.robot_pos['z']
+        
         
         
 
@@ -160,12 +131,34 @@ class regelungs_node(Node):
 
 
     def arm_position_callback(self, msg):
-        self.robot_pos['x'] = msg.pos_x + self.zero_position['x']
-        self.robot_pos['y'] = msg.pos_y + self.zero_position['y']
-        self.robot_pos['z'] = msg.pos_z + self.zero_position['z']
-        self.first_arm_pos = True
+        
+        
+        self.first_arm_pos += 1
+        if (self.first_arm_pos == 1):
+            self.robot_pos['x'] = msg.pos_x
+            self.robot_pos['y'] = msg.pos_y
+            self.robot_pos['z'] = msg.pos_z
+            self.zero_position['x'] = self.robot_pos['x']
+            self.zero_position['y'] = self.robot_pos['y']
+            self.zero_position['z'] = self.robot_pos['z']
+            self.box_unicorn =  self.adjust_box_position(self.box_unicorn)
+            self.box_cat =  self.adjust_box_position(self.box_cat)
+            self.default_pos =  self.adjust_box_position(self.default_pos)
+            self.safe_pos = self.adjust_box_position(self.safe_pos)
+            self.pick_up_z = self.zero_position['z'] + 13
+            self.ready_to_pick_up_z = self.zero_position['z'] + 12
+            self.get_logger().info(f"zero position is: x={self.zero_position['x']}, y={self.zero_position['y']}, z={self.zero_position['z']}")
+        
+        else:
+            self.robot_pos['x'] = msg.pos_x + self.zero_position['x']
+            self.robot_pos['y'] = msg.pos_y + self.zero_position['y']
+            self.robot_pos['z'] = msg.pos_z + self.zero_position['z']
+        current_time = time.time()
+        if current_time - self.last_msg_time >= 1.0:
+            self.get_logger().info(f"robot position is: x={self.robot_pos['x']}, y={self.robot_pos['y']}, z={self.robot_pos['z']}")
+        self.last_msg_time = current_time
         self.regler()
-  
+        
 
     def object_data_callback(self, msg):
         self.user_target = False
@@ -224,7 +217,7 @@ class regelungs_node(Node):
        
         if(self.state == State.Moving_to_object or State.Sorting): 
             self.regler()
-            time.sleep(1)
+            return None
             #self.go_to_target_position()
             
 
@@ -266,6 +259,8 @@ class regelungs_node(Node):
 
     def regler(self):
         self.get_logger().info('Start controlling')
+        if (self.state == State.Idle):
+            return None
        
         differenz_x = self.target_position['x'] - self.robot_pos['x']    
         differenz_y = self.target_position['y'] - self.robot_pos['y']  
@@ -280,26 +275,26 @@ class regelungs_node(Node):
         
         vel_x = self.compute_pd(differenz_x, self.last_error_x, dt)
         self.last_error_x = differenz_x
-        if (vel_x > 0.01):
+        """if (vel_x > 0.01):
             vel_x = 0.01
         elif(vel_x < -0.01):
-            vel_x = -0.01
+            vel_x = -0.01"""
         print(vel_x)
         
         vel_y = self.compute_pd(differenz_y, self.last_error_y, dt)
         self.last_error_y = differenz_y
-        if (vel_y > 0.01):
+        """if (vel_y > 0.01):
             vel_y = 0.01
         elif(vel_y < -0.01):
-            vel_y = -0.01
+            vel_y = -0.01"""
         print(vel_y)
         
         vel_z = self.compute_pd(differenz_z, self.last_error_z, dt)
         self.last_error_z = differenz_z
-        if (vel_z > 0.01):
+        """if (vel_z > 0.01):
             vel_z = 0.01
         elif (vel_z < -0.01):
-            vel_z = -0.01
+            vel_z = -0.01"""
         print(vel_z)
      
         robot_cmd = RobotCmd()
@@ -345,6 +340,7 @@ class regelungs_node(Node):
         if(((self.robot_pos['x'] == self.box_cat['x']) and (self.robot_pos['y'] == self.box_cat['y']))
         or ((self.robot_pos['x'] == self.box_unicorn['x']) and (self.robot_pos['y'] == self.box_unicorn['y']))):
             self.state = State.Over_Box
+            self.get_logger().info(f'Updated state to {self.state.name}')  
             return None
         elif(((self.target_position['x'] == self.box_cat['x']) and (self.target_position['y'] == self.box_cat['y']))
         or ((self.target_position['x'] == self.box_unicorn['x']) and (self.target_position['y'] == self.box_unicorn['y']))):
@@ -385,6 +381,7 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
 
 
 
