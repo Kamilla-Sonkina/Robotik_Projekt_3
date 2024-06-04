@@ -68,7 +68,8 @@ class regelungs_node(Node):
         """self.target_position['x'] = self.default_pos['x']
         self.target_position['y'] = self.default_pos['y']
         self.target_position['z'] = self.default_pos['z']"""
-
+        self.controlling_tolerance = 0.005
+        self.safe_mode == False
         
 
         self.state = State.Idle
@@ -279,17 +280,17 @@ class regelungs_node(Node):
         
         vel_x = self.compute_pd(differenz_x, self.last_error_x, dt)
         self.last_error_x = differenz_x
-        vel_x = 0.1*vel_x
+        
         print(vel_x)
         
         vel_y = self.compute_pd(differenz_y, self.last_error_y, dt)
         self.last_error_y = differenz_y
-        vel_y = 0.1*vel_y
+        
         print(vel_y)
         
         vel_z = self.compute_pd(differenz_z, self.last_error_z, dt)
         self.last_error_z = differenz_z
-        vel_z = 0.1*vel_z
+        
         print(vel_z)
      
         robot_cmd = RobotCmd()
@@ -310,7 +311,8 @@ class regelungs_node(Node):
         control_signal = self.kp * error + self.kd * derivative
 
         control_signal = float(control_signal)
-        
+        if(self.safe_mode == True):
+            control_signal = 0.1*control_signal
         return control_signal
 
     
@@ -328,41 +330,49 @@ class regelungs_node(Node):
         self.get_logger().info('Fehler: ' + Fehlermeldung)
         self.target_position = self.safe_pos
         self.emergency = True
+        self.safe_mode = True
         while(self.emergency):
             self.regler()
 
     def update_State(self):
-        if(((abs(self.robot_pos['x'] - self.box_cat['x'])<= 0.5) and (abs(self.robot_pos['y'] - self.box_cat['y'])<= 0.5))
-        or ((abs(self.robot_pos['x'] - self.box_unicorn['x'])<= 0.5) and (abs(self.robot_pos['y'] - self.box_unicorn['y']))<= 0.5)):
+        if(((abs(self.robot_pos['x'] - self.box_cat['x'])< self.controlling_tolerance) 
+            and (abs(self.robot_pos['y'] - self.box_cat['y'])< self.controlling_tolerance))
+        or ((abs(self.robot_pos['x'] - self.box_unicorn['x'])< self.controlling_tolerance) 
+            and (abs(self.robot_pos['y'] - self.box_unicorn['y']))< self.controlling_tolerance)):
             self.state = State.Over_Box
             self.get_logger().info(f'Updated state to {self.state.name}')  
             return None
-        elif(self.gripper_is_activated == True and (abs(self.robot_pos['x'] - self.target_position['x']) <= 0.5)
-             and (abs(self.robot_pos['y'] - self.target_position['y']) <= 0.5) and (abs(self.robot_pos['z'] == self.pick_up_z) <= 0.5)):
+        elif(self.gripper_is_activated == True 
+             and (abs(self.robot_pos['x'] - self.target_position['x']) < self.controlling_tolerance)
+             and (abs(self.robot_pos['y'] - self.target_position['y']) < self.controlling_tolerance) 
+             and (abs(self.robot_pos['z'] - self.pick_up_z) < self.controlling_tolerance)):
             self.state = State.Sorting
             self.calculate_target_position()
             self.get_logger().info(f'Updated state to {self.state.name}')  
             return None
-        elif((self.robot_pos['x'] == self.default_pos['x']) 
-             and (self.robot_pos['y'] == self.default_pos['y'])
-             and (self.robot_pos['z'] == self.default_pos['z'])):
+        elif((abs(self.robot_pos['x'] - self.default_pos['x']) < self.controlling_tolerance)
+             and (abs(self.robot_pos['y'] - self.default_pos['y']) < self.controlling_tolerance)
+             and (abs(self.robot_pos['z'] - self.default_pos['z']) < self.controlling_tolerance)):
             self.state = State.Default
             self.get_logger().info(f'Updated state to {self.state.name}')  
             return None
-        elif(((self.robot_pos['x'] == self.target_position['x']) and (self.robot_pos['y'] == self.target_position['y']))
-             and self.robot_pos['z'] == self.ready_to_pick_up_z and self.gripper_is_activated == False):
+        elif(abs((self.target_position['x'] - self.robot_pos['x']) < self.controlling_tolerance)
+            and (abs(self.target_position['y'] - self.robot_pos['y']) < self.controlling_tolerance)
+            and (abs(self.ready_to_pick_up_z - self.robot_pos['z']) < self.controlling_tolerance) 
+            and self.gripper_is_activated == False):
             self.state = State.Ready_to_pick_up
             self.get_logger().info(f'Updated state to {self.state.name}')  
             return None
-        elif(((self.robot_pos['x'] == self.target_position['x']) and (self.robot_pos['y'] == self.target_position['y']))
-             and self.robot_pos['z'] == self.target_position['z']):
+        elif(abs((self.target_position['x'] - self.robot_pos['x']) < self.controlling_tolerance)
+            and (abs(self.target_position['y'] - self.robot_pos['y']) < self.controlling_tolerance)
+            and (abs(self.target_position['z'] - self.robot_pos['z']) < self.controlling_tolerance)):
             self.state = State.Idle
             self.get_logger().info(f'Updated state to {self.state.name}')  
             return None
-        elif((self.target_position['x'] != self.robot_pos['x']) 
-        and (self.target_position['y'] != self.robot_pos['y']) 
-        and (self.target_position['z'] != self.robot_pos['z'])
-        and self.gripper_is_activated == False):
+        elif(abs((self.target_position['x'] - self.robot_pos['x']) >= self.controlling_tolerance)
+            and (abs(self.target_position['y'] - self.robot_pos['y']) >= self.controlling_tolerance)
+            and (abs(self.target_position['z'] - self.robot_pos['z'])>= self.controlling_tolerance)
+            and self.gripper_is_activated == False):
             self.state = State.Moving_to_object
             
         
@@ -376,9 +386,15 @@ def main(args=None):
     node = regelungs_node()
     rclpy.spin(node)
     rclpy.shutdown()
-
+                
 if __name__ == '__main__':
     main()
+
+
+
+
+
+
 
 
 
