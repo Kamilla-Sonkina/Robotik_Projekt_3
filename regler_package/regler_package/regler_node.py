@@ -46,7 +46,8 @@ class regelungs_node(Node):
         self.last_error_x = 0
         self.last_error_y = 0
         self.last_error_z = 0
-        self.kp = 9.85199  
+        #self.kp = 9.85199 
+        self.kp = 4 
         self.kd = 6.447857  
         self.first_arm_pos = 0
         
@@ -68,7 +69,7 @@ class regelungs_node(Node):
         """self.target_position['x'] = self.default_pos['x']
         self.target_position['y'] = self.default_pos['y']
         self.target_position['z'] = self.default_pos['z']"""
-        self.controlling_tolerance = 0.005
+        self.controlling_tolerance = 0.01
         self.safe_mode = False
         
 
@@ -136,9 +137,9 @@ class regelungs_node(Node):
         
         self.first_arm_pos += 1
         if (self.first_arm_pos == 1):
-            self.robot_pos['x'] = msg.pos_x
-            self.robot_pos['y'] = msg.pos_y
-            self.robot_pos['z'] = msg.pos_z
+            self.robot_pos['x'] = round(msg.pos_x, 3)
+            self.robot_pos['y'] = round(msg.pos_y, 3)
+            self.robot_pos['z'] = round(msg.pos_z, 3)
             self.zero_position['x'] = self.robot_pos['x']
             self.zero_position['y'] = self.robot_pos['y']
             self.zero_position['z'] = self.robot_pos['z']
@@ -149,14 +150,14 @@ class regelungs_node(Node):
             self.pick_up_z = self.zero_position['z'] + self.pick_up_z
             self.ready_to_pick_up_z = self.zero_position['z'] + self.ready_to_pick_up_z
             self.get_logger().info(f"zero position is: x={self.zero_position['x']}, y={self.zero_position['y']}, z={self.zero_position['z']}")
-            self.target_position['x'] = self.zero_position['x']
+            """self.target_position['x'] = self.zero_position['x']
             self.target_position['y'] = self.zero_position['y']
-            self.target_position['z'] = self.zero_position['z']
+            self.target_position['z'] = self.zero_position['z']"""
         
         else:
-            self.robot_pos['x'] = msg.pos_x + self.zero_position['x']
-            self.robot_pos['y'] = msg.pos_y + self.zero_position['y']
-            self.robot_pos['z'] = msg.pos_z + self.zero_position['z']
+            self.robot_pos['x'] = round((msg.pos_x + self.zero_position['x']), 3)
+            self.robot_pos['y'] = round((msg.pos_y + self.zero_position['y']), 3)
+            self.robot_pos['z'] = round((msg.pos_z + self.zero_position['z']), 3)
         current_time = time.time()
         if current_time - self.last_msg_time >= 1.0:
             self.get_logger().info(f"robot position is: x={self.robot_pos['x']}, y={self.robot_pos['y']}, z={self.robot_pos['z']}")
@@ -171,7 +172,8 @@ class regelungs_node(Node):
         self.object_data['class'] = msg.object_class
         self.object_data['timestamp'] = msg.timestamp_value
         self.object_data['index'] = msg.index_value
-        self.enqueue(self.object_data)
+        if not any(obj['index'] == self.object_data['index'] for obj in self.queue):
+            self.enqueue(self.object_data)
         
         if(len(self.queue) == 1):
             self.dequeue()
@@ -189,8 +191,9 @@ class regelungs_node(Node):
 
     def calculate_target_position(self):
 
-        self.get_logger().info('Start calculating target position')
-        
+        #self.get_logger().info('Start calculating target position')
+        if(self.target_position['x'] == None):
+            return None
         if(self.gripper_is_activated is True):
             if(self.oldest_object['class'] == 'cat'):
                 self.target_position = self.box_cat
@@ -204,7 +207,9 @@ class regelungs_node(Node):
             self.target_position['y'] = self.oldest_object['y']
             self.target_position['z'] = self.ready_to_pick_up_z
             self.get_logger().info(f"object is at: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
-        
+        elif(self.user_target == True):
+            self.get_logger().info(f"target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
+            self.go_to_target_position() 
 
         else: 
             self.update_State()
@@ -212,7 +217,7 @@ class regelungs_node(Node):
                 return None
             else:    
                 self.target_position = self.default_pos
-
+        self.get_logger().info(f"target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
         self.go_to_target_position()
        
 
@@ -234,6 +239,7 @@ class regelungs_node(Node):
             return None
         else:
             if(self.state == State.Ready_to_pick_up): 
+                print('picking up')
                 self.gripper_is_activated = True
                 self.target_position['z'] = self.pick_up_z
                 self.regler()
@@ -243,7 +249,7 @@ class regelungs_node(Node):
                 self.regler()
                 self.state = State.Ready_to_pick_up
                 self.go_to_target_position()
-            else: return None
+            else: self.regler()
        
     def sort(self, oldest_object):
         self.get_logger().info('Start sorting')
@@ -264,8 +270,7 @@ class regelungs_node(Node):
 
     def regler(self):
         #self.get_logger().info('Start controlling')
-        if (self.state == State.Idle):
-            return None
+        
        
         differenz_x = self.target_position['x'] - self.robot_pos['x']    
         differenz_y = self.target_position['y'] - self.robot_pos['y']  
@@ -304,16 +309,22 @@ class regelungs_node(Node):
 
         
     def compute_pd(self, error, last_error, dt):
-        self.get_logger().info('Start computing pd')
-      
+        # self.get_logger().info('Start computing pd')
+        
         derivative = (error - last_error) / dt
-      
+        
         control_signal = self.kp * error + self.kd * derivative
-
+        
         control_signal = float(control_signal)
-        if(self.safe_mode == True):
-            control_signal = 0.1*control_signal
+        
+        if self.safe_mode:
+            control_signal = 0.1 * control_signal
+        
+        # Limit the control signal to +-0.3
+        control_signal = max(min(control_signal, 0.3), -0.3)
+        
         return control_signal
+
 
     
     def enqueue(self, object_data):
@@ -390,12 +401,6 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
 
 
 
