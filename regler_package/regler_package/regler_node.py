@@ -69,7 +69,7 @@ class regelungs_node(Node):
         self.target_position['y'] = self.default_pos['y']
         self.target_position['z'] = self.default_pos['z']"""
         self.controlling_tolerance = 0.005
-        self.safe_mode == False
+        self.safe_mode = False
         
 
         self.state = State.Idle
@@ -350,17 +350,18 @@ class regelungs_node(Node):
             self.calculate_target_position()
             self.get_logger().info(f'Updated state to {self.state.name}')  
             return None
-        elif((abs(self.robot_pos['x'] - self.default_pos['x']) < self.controlling_tolerance)
-             and (abs(self.robot_pos['y'] - self.default_pos['y']) < self.controlling_tolerance)
-             and (abs(self.robot_pos['z'] - self.default_pos['z']) < self.controlling_tolerance)):
-            self.state = State.Default
-            self.get_logger().info(f'Updated state to {self.state.name}')  
-            return None
+        
         elif(abs((self.target_position['x'] - self.robot_pos['x']) < self.controlling_tolerance)
             and (abs(self.target_position['y'] - self.robot_pos['y']) < self.controlling_tolerance)
             and (abs(self.ready_to_pick_up_z - self.robot_pos['z']) < self.controlling_tolerance) 
             and self.gripper_is_activated == False):
             self.state = State.Ready_to_pick_up
+            self.get_logger().info(f'Updated state to {self.state.name}')  
+            return None
+        elif((abs(self.robot_pos['x'] - self.default_pos['x']) < self.controlling_tolerance)
+             and (abs(self.robot_pos['y'] - self.default_pos['y']) < self.controlling_tolerance)
+             and (abs(self.robot_pos['z'] - self.default_pos['z']) < self.controlling_tolerance)):
+            self.state = State.Default
             self.get_logger().info(f'Updated state to {self.state.name}')  
             return None
         elif(abs((self.target_position['x'] - self.robot_pos['x']) < self.controlling_tolerance)
@@ -389,6 +390,17 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
+
+
+
+
+
+
+
+
+
+
+
 
 
 
