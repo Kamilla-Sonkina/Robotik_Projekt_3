@@ -54,7 +54,7 @@ class ObjectTrackingNode(Node):
                 x1, y1, x2, y2 = [int(coord * 2) for coord in result[:4]]
                 w = x2 - x1
                 h = y2 - y1
-                label = 'Einhorn' if int(result[5]) == 1 else 'Katze'
+                label = 'unicorn' if int(result[5]) == 1 else 'cat'
                 objects_rect.append((x1, y1, w, h, label))
 
         tracked_objects = self.tracker.update([rect[:4] for rect in objects_rect], current_time)
@@ -95,3 +95,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
