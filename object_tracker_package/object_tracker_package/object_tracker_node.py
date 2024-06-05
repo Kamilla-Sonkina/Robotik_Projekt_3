@@ -15,12 +15,12 @@ class ObjectTrackingNode(Node):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.get_logger().info(f"Verwende Gerät: {device}")
 
-        model_path = "path_to_your_model/best.pt"
+        model_path = "/home/markus/Desktop/runs/detect/train5/weights/best.pt"
         self.detector = ObjectDetector(model_path, device)
         self.transformer = TopDownTransformer()
         self.tracker = EuclideanDistTracker()
 
-        video_path = "path_to_your_video/video.mov"
+        video_path = "/home/markus/Downloads/test_video.mov"
         self.cap = cv2.VideoCapture(video_path)
         self.frame_count = 0
         self.results_cache = []
@@ -71,6 +71,7 @@ class ObjectTrackingNode(Node):
             object_msg.timestamp_value = float(current_time)
             object_msg.index_value = int(id)
             self.object_publisher.publish(object_msg)
+            self.get_logger().info(f"object is at x: {object_msg.object_pos_x}, y: {object_msg.object_pos_y}, the class is: {object_msg.object_class}, the id is: {object_msg.index_value}")
 
             speed = self.tracker.get_speed(id)
             speed_msg = Float64()
@@ -95,4 +96,5 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
 
