@@ -6,6 +6,7 @@ from object_interfaces.msg import ObjectData
 from std_msgs.msg import Float64
 import time
 from enum import Enum
+from builtin_interfaces.msg import Time
 
 class State(Enum):
     Initialisierung = 0
@@ -75,7 +76,7 @@ class regelungs_node(Node):
         self.target_position['z'] = self.default_pos['z']"""
         self.controlling_tolerance = 0.01
         self.safe_mode = False
-        
+        self.current_time = 0
 
         self.state = State.Idle
         #self.regler()
@@ -91,7 +92,7 @@ class regelungs_node(Node):
         return box
 
     def move_to_zero_position(self):
-        robot_cmd = RobotCmd()
+        """robot_cmd = RobotCmd()
         robot_cmd.accel_x = 0.0
         robot_cmd.accel_y = 0.0
         robot_cmd.accel_z = -0.01
@@ -117,7 +118,8 @@ class regelungs_node(Node):
         self.robot_command_pub.publish(robot_cmd)
         time.sleep(15)
 
-        
+        """
+        pass
         
         
         
@@ -138,7 +140,8 @@ class regelungs_node(Node):
 
     def arm_position_callback(self, msg):
         
-        
+        self.current_time = self.get_clock().now().to_msg().sec
+        print(self.current_time)
         self.first_arm_pos += 1
         if (self.first_arm_pos == 1):
             self.robot_pos['x'] = round(msg.pos_x, 3)
@@ -280,11 +283,11 @@ class regelungs_node(Node):
         differenz_y = self.target_position['y'] - self.robot_pos['y']  
         differenz_z = self.target_position['z'] - self.robot_pos['z']   
 
-        current_time = time.time()
+        
     
-        dt = current_time - self.last_calculation_time
+        dt = self.current_time - self.last_calculation_time
       
-        self.last_calculation_time = current_time
+        self.last_calculation_time = self.current_time
 
         
         u_x = self.compute_pd(differenz_x, self.last_error_x, dt, self.kp_x, self.kd_x)
@@ -406,10 +409,6 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
-
-
-
-
 
 
 
