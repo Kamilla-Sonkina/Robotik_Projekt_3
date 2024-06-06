@@ -82,6 +82,10 @@ class ObjectTrackingNode(Node):
             cv2.putText(frame, f'ID: {id} {label}', (x, y - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
             cv2.putText(frame, f'Speed: {speed:.2f} cm/s', (x, y - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
 
+            center_position = self.tracker.get_object_center(id)
+                if center_position:
+                    cv2.circle(frame, center_position, 5, (0, 0, 255), -1)
+
         cv2.imshow('Frame', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             self.cap.release()
