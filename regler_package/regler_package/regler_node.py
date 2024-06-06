@@ -163,8 +163,8 @@ class regelungs_node(Node):
             self.robot_pos['y'] = round((msg.pos_y + self.zero_position['y']), 3)
             self.robot_pos['z'] = round((msg.pos_z + self.zero_position['z']), 3)
         current_time = time.time()
-        if current_time - self.last_msg_time >= 1.0:
-            self.get_logger().info(f"robot position is: x={self.robot_pos['x']}, y={self.robot_pos['y']}, z={self.robot_pos['z']}")
+        #if current_time - self.last_msg_time >= 1.0:
+        self.get_logger().info(f"robot position is: x={self.robot_pos['x']}, y={self.robot_pos['y']}, z={self.robot_pos['z']}")
         self.last_msg_time = current_time
         self.calculate_target_position()
         
@@ -287,25 +287,25 @@ class regelungs_node(Node):
         self.last_calculation_time = current_time
 
         
-        vel_x = self.compute_pd(differenz_x, self.last_error_x, dt, self.kp_x, self.kd_x)
+        u_x = self.compute_pd(differenz_x, self.last_error_x, dt, self.kp_x, self.kd_x)
         self.last_error_x = differenz_x
         
-        print(vel_x)
+        print(u_x)
         
-        vel_y = self.compute_pd(differenz_y, self.last_error_y, dt, self.kp_y, self.kd_y)
+        u_y = self.compute_pd(differenz_y, self.last_error_y, dt, self.kp_y, self.kd_y)
         self.last_error_y = differenz_y
         
-        print(vel_y)
+        print(u_y)
         
-        vel_z = self.compute_pd(differenz_z, self.last_error_z, dt, self.kp_z, self.kd_z)
+        u_z = self.compute_pd(differenz_z, self.last_error_z, dt, self.kp_z, self.kd_z)
         self.last_error_z = differenz_z
         
-        print(vel_z)
+        print(u_z)
      
         robot_cmd = RobotCmd()
-        robot_cmd.accel_x = vel_x
-        robot_cmd.accel_y = vel_y
-        robot_cmd.accel_z = vel_z
+        robot_cmd.accel_x = u_x
+        robot_cmd.accel_y = u_y
+        robot_cmd.accel_z = u_z
         robot_cmd.activate_gripper = self.gripper_is_activated
         self.robot_command_pub.publish(robot_cmd)
         self.get_logger().info('published robot_cmd')
@@ -346,8 +346,8 @@ class regelungs_node(Node):
         self.target_position = self.safe_pos
         self.emergency = True
         self.safe_mode = True
-        while(self.emergency):
-            self.regler()
+        
+        self.regler()
             
 
     def update_State(self):
@@ -406,8 +406,6 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
-
-
 
 
 
