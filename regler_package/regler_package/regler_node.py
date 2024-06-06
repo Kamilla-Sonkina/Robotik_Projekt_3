@@ -140,7 +140,7 @@ class regelungs_node(Node):
 
     def arm_position_callback(self, msg):
         
-        self.current_time = self.get_clock().now().to_msg().sec
+        self.current_time = time.time() #self.get_clock().now().to_msg().sec
         print(self.current_time)
         self.first_arm_pos += 1
         if (self.first_arm_pos == 1):
