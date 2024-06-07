@@ -1,3 +1,4 @@
+
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64
@@ -21,6 +22,7 @@ class ObjectTrackingNode(Node):
         self.tracker = EuclideanDistTracker()
 
         video_path = "/home/markus/Downloads/test_video.mov"
+        #video_path=2
         self.cap = cv2.VideoCapture(video_path)
         self.frame_count = 0
         self.results_cache = []
@@ -40,7 +42,8 @@ class ObjectTrackingNode(Node):
             self.cap.release()
             return
 
-        current_time = time.time()
+        #current_time = time.time()
+        current_time = self.cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
 
         frame = self.transformer.get_transformed_frame(frame)
         height, width = frame.shape[:2]
@@ -83,8 +86,8 @@ class ObjectTrackingNode(Node):
             cv2.putText(frame, f'Speed: {speed:.2f} cm/s', (x, y - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
 
             center_position = self.tracker.get_object_center(id)
-                if center_position:
-                    cv2.circle(frame, center_position, 5, (0, 0, 255), -1)
+            if center_position:
+                cv2.circle(frame, center_position, 5, (0, 0, 255), -1)
 
         cv2.imshow('Frame', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
