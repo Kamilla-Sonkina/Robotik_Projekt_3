@@ -32,7 +32,7 @@ class regelungs_node(Node):
         self.target_pos_sub = self.create_subscription(TargetPose, 'target_position', self.target_position_callback, 10)
         self.vel_sub = self.create_subscription(Float64, 'velocity', self.velocity_callback, 10)
         self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_position', self.arm_position_callback, 10)
-        self.last_msg_time = 0
+        
         self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_command', 10)
         self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
         self.object_data = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
@@ -42,7 +42,7 @@ class regelungs_node(Node):
         self.gripper_is_activated = False
         self.target_position = {'x': None, 'y': None, 'z': None}
         self.corner = {'x': 0, 'y': 0, 'z': 0}
-        self.last_calculation_time = time.time()
+        self.last_calculation_time = time.time_ns()
 
         self.last_error_x = 0
         self.last_error_y = 0
@@ -71,12 +71,10 @@ class regelungs_node(Node):
         self.ready_to_pick_up_z = 0.1 #0.0067
         self.last_msg_time = time.time()
         self.move_to_zero_position()
-        """self.target_position['x'] = self.default_pos['x']
-        self.target_position['y'] = self.default_pos['y']
-        self.target_position['z'] = self.default_pos['z']"""
+        
         self.controlling_tolerance = 0.01
         self.safe_mode = False
-        self.current_time = 0
+        self.current_time = 1
 
         self.state = State.Idle
         #self.regler()
@@ -119,7 +117,7 @@ class regelungs_node(Node):
         time.sleep(15)
 
         """
-        pass
+        time.sleep(1)
         
         
         
@@ -139,9 +137,10 @@ class regelungs_node(Node):
 
 
     def arm_position_callback(self, msg):
-        
-        self.current_time = time.time() #self.get_clock().now().to_msg().sec
+        self.last_calculation_time = self.current_time
+        self.current_time = time.time_ns() / 10e9 #self.get_clock().now().to_msg().sec
         print(self.current_time)
+        print(self.last_calculation_time)
         self.first_arm_pos += 1
         if (self.first_arm_pos == 1):
             self.robot_pos['x'] = round(msg.pos_x, 3)
@@ -165,10 +164,10 @@ class regelungs_node(Node):
             self.robot_pos['x'] = round((msg.pos_x + self.zero_position['x']), 3)
             self.robot_pos['y'] = round((msg.pos_y + self.zero_position['y']), 3)
             self.robot_pos['z'] = round((msg.pos_z + self.zero_position['z']), 3)
-        current_time = time.time()
+        
         #if current_time - self.last_msg_time >= 1.0:
         self.get_logger().info(f"robot position is: x={self.robot_pos['x']}, y={self.robot_pos['y']}, z={self.robot_pos['z']}")
-        self.last_msg_time = current_time
+        self.last_msg_time = self.current_time
         self.calculate_target_position()
         
 
@@ -277,7 +276,8 @@ class regelungs_node(Node):
 
     def regler(self):
         #self.get_logger().info('Start controlling')
-        
+        print(self.current_time)
+        print(self.last_calculation_time)
        
         differenz_x = self.target_position['x'] - self.robot_pos['x']    
         differenz_y = self.target_position['y'] - self.robot_pos['y']  
@@ -285,9 +285,9 @@ class regelungs_node(Node):
 
         
     
-        dt = self.current_time - self.last_calculation_time
+        dt = (self.current_time - self.last_calculation_time) 
       
-        self.last_calculation_time = self.current_time
+        
 
         
         u_x = self.compute_pd(differenz_x, self.last_error_x, dt, self.kp_x, self.kd_x)
@@ -409,6 +409,7 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
+
 
 
 
