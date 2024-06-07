@@ -8,6 +8,8 @@ class EuclideanDistTracker:
         self.__id_count = 0
         self.__positions = {} # zeitstempel und Position und Schlüssel ID
         self.__speed_window_size = 5  # Number of frames for smoothing
+        self.avg_speed = 0
+        self.speed_data_count = 0
 
     # verwaltung der ID, Koordinaten und Mittelpunkt 
     def update(self, objects_rect, current_time):
@@ -72,7 +74,18 @@ class EuclideanDistTracker:
 
             if total_time > 0: 
                 average_speed = total_dist / total_time 
-                return average_speed * 0.052
+                #return average_speed * 0.052
+
+                if(self.speed_data_count == 0):
+                    self.avg_speed = average_speed
+                self.avg_speed = (self.avg_speed * self.speed_data_count + average_speed) / (self.speed_data_count + 1)
+                self.speed_data_count += 1
+
+                return self.avg_speed * 0.052
+            
+            
+
+            
 
         return 0
 
