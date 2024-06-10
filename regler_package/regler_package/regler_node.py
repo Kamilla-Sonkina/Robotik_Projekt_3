@@ -79,6 +79,10 @@ class regelungs_node(Node):
         self.state = State.Idle
         #self.regler()
         self.get_logger().info('initializing finished')
+
+        self.controll_u_x = 0
+        self.controll_u_y = 0
+        self.controll_u_z = 0
         
 
 
@@ -90,7 +94,7 @@ class regelungs_node(Node):
         return box
 
     def move_to_zero_position(self):
-        """robot_cmd = RobotCmd()
+        robot_cmd = RobotCmd()
         robot_cmd.accel_x = 0.0
         robot_cmd.accel_y = 0.0
         robot_cmd.accel_z = -0.01
@@ -116,7 +120,7 @@ class regelungs_node(Node):
         self.robot_command_pub.publish(robot_cmd)
         time.sleep(15)
 
-        """
+        
         time.sleep(1)
         
         
@@ -143,7 +147,7 @@ class regelungs_node(Node):
         print(self.last_calculation_time)
         self.first_arm_pos += 1
         if (self.first_arm_pos == 1):
-            self.robot_pos['x'] = round(msg.pos_x, 3)
+            self.robot_pos['x'] = round(-msg.pos_x, 3)
             self.robot_pos['y'] = round(msg.pos_y, 3)
             self.robot_pos['z'] = round(msg.pos_z, 3)
             self.zero_position['x'] = self.robot_pos['x']
@@ -161,7 +165,7 @@ class regelungs_node(Node):
             self.target_position['z'] = self.zero_position['z']"""
         
         else:
-            self.robot_pos['x'] = round((msg.pos_x + self.zero_position['x']), 3)
+            self.robot_pos['x'] = round((-msg.pos_x + self.zero_position['x']), 3)
             self.robot_pos['y'] = round((msg.pos_y + self.zero_position['y']), 3)
             self.robot_pos['z'] = round((msg.pos_z + self.zero_position['z']), 3)
         
@@ -198,13 +202,11 @@ class regelungs_node(Node):
     def calculate_target_position(self):
 
         #self.get_logger().info('Start calculating target position')
-        if(self.target_position['x'] == None):
+        if(self.state == State.Idle):
             return None
         if(self.gripper_is_activated is True):
-            if(self.oldest_object['class'] == 'cat'):
-                self.target_position = self.box_cat
-            elif(self.oldest_object['class'] == 'unicorn'):
-                self.target_position = self.box_unicorn
+            if(self.oldest_object['class'] == 'cat' or 'unicorn'):
+                self.sort(self.oldest_object)
             else:
                 self.target_position = self.default_pos
         
@@ -240,7 +242,7 @@ class regelungs_node(Node):
         if(self.state == State.Over_Box): 
             self.gripper_is_activated = False
             self.regler()
-            #self.calculate_target_position()
+            
         elif(self.state == State.Default): 
             return None
         else:
@@ -261,15 +263,21 @@ class regelungs_node(Node):
         self.get_logger().info('Start sorting')
         if(self.gripper_is_activated): 
             if(oldest_object['class'] == 'cat'):
-                self.target_position = self.box_cat
+                self.target_position['x'] = self.box_cat['x']
+                self.target_position['y'] = self.box_cat['y']
+                self.target_position['z'] = self.box_cat['z']
                 self.state = State.Sorting
-                self.go_to_target_position()
+                while(self.state == State.Sorting):
+                    self.go_to_target_position() 
                 self.gripper_is_activated = False
                 self.oldest_object = self.dequeue
             if(oldest_object['class'] ==  'unicorn'):
-                self.target_position = self.box_unicorn
+                self.target_position['x'] = self.box_unicorn['x']
+                self.target_position['y'] = self.box_unicorn['y']
+                self.target_position['z'] = self.box_unicorn['z']
                 self.state = State.Sorting
-                self.go_to_target_position()  
+                while(self.state == State.Sorting):
+                    self.go_to_target_position()  
                 self.gripper_is_activated = False  
                 self.oldest_object = self.dequeue
                 
@@ -282,6 +290,9 @@ class regelungs_node(Node):
         differenz_x = self.target_position['x'] - self.robot_pos['x']    
         differenz_y = self.target_position['y'] - self.robot_pos['y']  
         differenz_z = self.target_position['z'] - self.robot_pos['z']   
+        print(differenz_x)
+        #print(differenz_y)
+        #print(differenz_z)
 
         
     
@@ -292,18 +303,21 @@ class regelungs_node(Node):
         
         u_x = self.compute_pd(differenz_x, self.last_error_x, dt, self.kp_x, self.kd_x)
         self.last_error_x = differenz_x
+        self.controll_u_x = u_x
+        #print(u_x)
+        self.get_logger().info(f"differenz x:{differenz_x}, u_x: {u_x}, last error {self.last_error_x}, kd: {self.kd_x}, kp: {self.kp_x}")
+        self.get_logger().info(f"robot x:{self.robot_pos['x']},")
         
-        print(u_x)
-        
+
         u_y = self.compute_pd(differenz_y, self.last_error_y, dt, self.kp_y, self.kd_y)
         self.last_error_y = differenz_y
-        
-        print(u_y)
+        self.controll_u_y = u_y
+        #print(u_y)
         
         u_z = self.compute_pd(differenz_z, self.last_error_z, dt, self.kp_z, self.kd_z)
         self.last_error_z = differenz_z
-        
-        print(u_z)
+        self.controll_u_z = u_z
+        #print(u_z)
      
         robot_cmd = RobotCmd()
         robot_cmd.accel_x = u_x
@@ -313,6 +327,7 @@ class regelungs_node(Node):
         self.robot_command_pub.publish(robot_cmd)
         self.get_logger().info('published robot_cmd')
         self.update_State()
+
 
         
     def compute_pd(self, error, last_error, dt, kp,kd):
@@ -377,23 +392,25 @@ class regelungs_node(Node):
             self.state = State.Ready_to_pick_up
             self.get_logger().info(f'Updated state to {self.state.name}')  
             return None
+        
+        elif(abs((self.target_position['x'] - self.robot_pos['x']) >= self.controlling_tolerance)
+            and (abs(self.target_position['y'] - self.robot_pos['y']) >= self.controlling_tolerance)
+            and (abs(self.target_position['z'] - self.robot_pos['z'])>= self.controlling_tolerance)
+            and self.gripper_is_activated == False):
+            self.state = State.Moving_to_object
+        elif(abs((self.target_position['x'] - self.robot_pos['x']) < self.controlling_tolerance)
+            and (abs(self.target_position['y'] - self.robot_pos['y']) < self.controlling_tolerance)
+            and (abs(self.target_position['z'] - self.robot_pos['z']) < self.controlling_tolerance)
+            and self.oldest_object['id'] is not None):
+            self.state = State.Idle
+            self.get_logger().info(f'Updated state to {self.state.name}')  
+            return None
         elif((abs(self.robot_pos['x'] - self.default_pos['x']) < self.controlling_tolerance)
              and (abs(self.robot_pos['y'] - self.default_pos['y']) < self.controlling_tolerance)
              and (abs(self.robot_pos['z'] - self.default_pos['z']) < self.controlling_tolerance)):
             self.state = State.Default
             self.get_logger().info(f'Updated state to {self.state.name}')  
             return None
-        elif(abs((self.target_position['x'] - self.robot_pos['x']) < self.controlling_tolerance)
-            and (abs(self.target_position['y'] - self.robot_pos['y']) < self.controlling_tolerance)
-            and (abs(self.target_position['z'] - self.robot_pos['z']) < self.controlling_tolerance)):
-            self.state = State.Idle
-            self.get_logger().info(f'Updated state to {self.state.name}')  
-            return None
-        elif(abs((self.target_position['x'] - self.robot_pos['x']) >= self.controlling_tolerance)
-            and (abs(self.target_position['y'] - self.robot_pos['y']) >= self.controlling_tolerance)
-            and (abs(self.target_position['z'] - self.robot_pos['z'])>= self.controlling_tolerance)
-            and self.gripper_is_activated == False):
-            self.state = State.Moving_to_object
             
         
             self.get_logger().info(f'Updated state to {self.state.name}')   
@@ -409,6 +426,10 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
+
+
+
+
 
 
 
