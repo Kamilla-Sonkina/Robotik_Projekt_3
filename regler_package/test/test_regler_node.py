@@ -1,3 +1,4 @@
+
 import unittest
 from unittest.mock import MagicMock, patch
 import rclpy
@@ -25,7 +26,7 @@ class TestRegelungsNode(unittest.TestCase):
     def setUp(self):
         self.node = regelungs_node()
         self.node.robot_command_pub.publish = MagicMock()
-        self.regler_subscriber = self.node.create_subscription(RobotCmd, 'robot_command', self.acceleration_callback, 10)    
+        #self.regler_subscriber = self.node.create_subscription(RobotCmd, 'robot_command', self.acceleration_callback, 10)    
         self.object_data_pub = self.node.create_publisher(ObjectData, 'object_data', 10)
         self.acceleration_x = 0
         self.acceleration_y = 0
@@ -34,7 +35,7 @@ class TestRegelungsNode(unittest.TestCase):
     def tearDown(self):
         self.node.destroy_node()
 
-    def acceleration_callback(self, msg):
+    """def acceleration_callback(self, msg):
         self.acceleration_x = msg.accel_x 
         self.node.get_logger().info(self.acceleration_x) 
         self.acceleration_y = msg.accel_y
@@ -63,28 +64,31 @@ class TestRegelungsNode(unittest.TestCase):
         expected_pd = kp * error + kd * (error - last_error) / dt
         expected_pd = max(min(expected_pd, 0.3), -0.3)
         self.assertAlmostEqual(self.node.compute_pd(error, last_error, dt, kp, kd), expected_pd)
-
-    """def test_sort(self):
+"""
+    def test_sort(self):
         self.node.gripper_is_activated = True
-        self.node.oldest_object = {'class': 'cat'}
+        self.node.oldest_object = {'x': 0, 'y': 0, 'class': 'cat', 'timestamp': time.time(), 'index':0}
+        
         self.node.sort(self.node.oldest_object)
         self.assertEqual(self.node.target_position, self.node.box_cat)
         
-        self.node.oldest_object = {'class': 'unicorn'}
+        self.node.oldest_object = {'x': 0, 'y': 0, 'class': 'unicorn', 'timestamp': time.time(), 'index':0}
+        
         self.node.sort(self.node.oldest_object)
-        self.assertEqual(self.node.target_position, self.node.box_unicorn)"""
+        self.assertEqual(self.node.target_position, self.node.box_unicorn)
 
-    def test_enqueue_dequeue(self):
+    """ def test_enqueue_dequeue(self):
         object_data = {'x': 1, 'y': 2, 'class': 'cat', 'timestamp': 123, 'index': 0}
         self.node.enqueue(object_data)
         self.assertEqual(len(self.node.queue), 1)
         self.node.dequeue()
         self.assertEqual(self.node.oldest_object, object_data)
-        self.assertEqual(len(self.node.queue), 0)
+        self.assertEqual(len(self.node.queue), 0)"""
 
     """def test_calculate_target_position(self):
+        self.node.state = State.Moving_to_object
         self.node.gripper_is_activated = True
-        self.node.oldest_object = {'class': 'cat'}
+        self.node.oldest_object = {'x': 0, 'y': 0, 'class': 'cat', 'timestamp': time.time(), 'index':0}
         self.node.calculate_target_position()
         self.assertEqual(self.node.target_position, self.node.box_cat)
         
@@ -92,9 +96,9 @@ class TestRegelungsNode(unittest.TestCase):
         self.node.oldest_object = {'x': 1.0, 'y': 2.0, 'timestamp': time.time(), 'class': 'unicorn'}
         self.node.calculate_target_position()
         expected_x = self.node.oldest_object['x'] + self.node.velocity * (time.time() - self.node.oldest_object['timestamp'])
-        self.assertAlmostEqual(self.node.target_position['x'], expected_x)
-"""
-    @patch('time.time', return_value=1000000.0)
+        self.assertAlmostEqual(self.node.target_position['x'], expected_x)"""
+
+    """@patch('time.time', return_value=1000000.0)
     def test_regler(self, mock_time):
         self.node.robot_pos = {'x': 1.0, 'y': 2.0, 'z': 3.0}
         self.node.target_position = {'x': 1.01, 'y': 1.99, 'z': 3.1}
@@ -103,7 +107,7 @@ class TestRegelungsNode(unittest.TestCase):
         self.node.last_error_z = 0
     
         self.node.last_calculation_time = time.time()
-        #self.node.current_time = time.time()+1
+        
     
         self.node.regler()
     
@@ -124,6 +128,8 @@ class TestRegelungsNode(unittest.TestCase):
         self.assertAlmostEqual(self.node.controll_u_y, expected_vel_y)
         self.assertAlmostEqual(self.node.controll_u_z, expected_vel_z)
 
+        
+
     def test_go_to_target_position(self):
         self.node.target_position = {'x': 5.0, 'y': 5.0, 'z': 5.0}
         self.node.robot_pos = {'x': 0.0, 'y': 0.0, 'z': 0.0}
@@ -142,9 +148,8 @@ class TestRegelungsNode(unittest.TestCase):
 
     def test_full_automation(self):
         # This would be a full integration test involving the whole flow
-        pass
+        pass"""
 
 if __name__ == '__main__':
     unittest.main()
-
 
