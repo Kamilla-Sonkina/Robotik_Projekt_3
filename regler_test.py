@@ -2,7 +2,7 @@ import unittest
 import pytest
 from unittest.mock import MagicMock, patch
 import rclpy
-from regler_package.regler_node import regelungs_node, State
+from regel_package.regler_node import regelungs_node, State
 from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
 from object_interfaces.msg import ObjectData
 from std_msgs.msg import Float64
@@ -26,7 +26,6 @@ class TestRegelungsNode(unittest.TestCase):
         self.node.destroy_node()
 
     def test_init(self):
-        """Test initialization of the node."""
         self.assertEqual(self.node.get_name(), 'regelungs_node')
         self.assertIsNotNone(self.node.arm_positions_sub)
         self.assertIsNotNone(self.node.object_data_sub)
@@ -34,17 +33,15 @@ class TestRegelungsNode(unittest.TestCase):
         self.assertIsNotNone(self.node.robot_command_pub)
 
     def test_move_to_zero_position(self):
-        """Test the move_to_zero_position method."""
-        self.node.robot_pos = {'x': 1, 'y': 1, 'z': 1}
+        self.node.robot_pos = {'x': 0, 'y': 0, 'z': 0}
         self.node.move_to_zero_position()
         self.assertEqual(self.node.target_position, self.node.default_pos)
-        self.assertNotEqual(self.node.zero_position, {'x': 1, 'y': 1, 'z': 1})
+        self.assertNotEqual(self.node.zero_position, {'x': 0, 'y': 0, 'z': 0})
 
     def test_compute_pd(self):
-        """Test the compute_pd method."""
-        error = 6.0
-        last_error = 2.0
-        dt = 0.2
+        error = 5.0
+        last_error = 3.0
+        dt = 0.1
         kp = self.node.kp_x
         kd = self.node.kd_x
 
@@ -54,7 +51,6 @@ class TestRegelungsNode(unittest.TestCase):
         self.assertAlmostEqual(control_signal, expected_control_signal)
 
     def test_sort(self):
-        """Test the sort method."""
         self.node.oldest_object['class'] = 'cat'
         self.node.robot_pos = self.node.box_cat
         self.node.sort(self.node.oldest_object)
@@ -68,8 +64,7 @@ class TestRegelungsNode(unittest.TestCase):
         self.assertFalse(self.node.gripper_is_activated)
 
     def test_enqueue_dequeue(self):
-        """Test the enqueue and dequeue methods."""
-        object_data = {'x': 2, 'y': 3, 'class': 'cat', 'timestamp': 456, 'index': 1}
+        object_data = {'x': 2, 'y': 3, 'class': 'unicorn', 'timestamp': 456, 'index': 1}
         self.node.enqueue(object_data)
         self.assertEqual(len(self.node.queue), 1)
         self.node.dequeue()
@@ -77,16 +72,15 @@ class TestRegelungsNode(unittest.TestCase):
         self.assertEqual(len(self.node.queue), 0)
 
     def test_calculate_target_position(self):
-        """Test the calculate_target_position method."""
         self.node.gripper_is_activated = True
         self.node.oldest_object['timestamp'] = time.time()
         self.node.velocity = 0.2
-        self.node.oldest_object['x'] = 12
+        self.node.oldest_object['x'] = 15
         self.node.oldest_object['y'] = 15
 
-        self.node.oldest_object['class'] = 'cat'
+        self.node.oldest_object['class'] = 'unicorn'
         self.node.calculate_target_position()
-        self.assertEqual(self.node.target_position, self.node.box_cat)
+        self.assertEqual(self.node.target_position, self.node.box_unicorn)
 
         self.node.gripper_is_activated = False
         self.node.calculate_target_position()
@@ -102,9 +96,8 @@ class TestRegelungsNode(unittest.TestCase):
         self.assertEqual(self.node.target_position, self.node.default_pos)
 
     def test_regler(self):
-        """Test the regler method."""
-        self.node.robot_pos = {'x': 1.0, 'y': 2.0, 'z': 3.0}
-        self.node.target_position = {'x': 4.0, 'y': 5.0, 'z': 6.0}
+        self.node.robot_pos = {'x': 1.0, 'y': 3.0, 'z': 4.0}
+        self.node.target_position = {'x': 4.0, 'y': 6.0, 'z': 8.0}
         self.node.last_error_x = 0
         self.node.last_error_y = 0
         self.node.last_error_z = 0
@@ -126,49 +119,52 @@ class TestRegelungsNode(unittest.TestCase):
         self.assertAlmostEqual(self.node.controll_u_z, expected_vel_z, places=5)
 
     def test_go_to_target_position(self):
-        """Test the go_to_target_position method."""
+        # Test state transition for Moving_to_object
         self.node.state = State.Moving_to_object
         self.node.target_position = {'x': 1.0, 'y': 2.0, 'z': 3.0}
         self.node.robot_pos = {'x': 0.0, 'y': 0.0, 'z': 0.0}
 
-        # Patch the regler method to monitor its calls
+        # mock-- regler method is called
         with patch.object(self.node, 'regler', wraps=self.node.regler) as mock_regler:
             self.node.go_to_target_position()
-            # Assert that regler was called during go_to_target_position
             assert mock_regler.called
 
-        # Test the Over_Box state
+        # Test state transition for Over_Box
         self.node.state = State.Over_Box
         self.node.go_to_target_position()
         self.assertFalse(self.node.gripper_is_activated)
 
-        # Test the Ready_to_pick_up state
+        # Test state transition for Ready_to_pick_up
         self.node.state = State.Ready_to_pick_up
         self.node.go_to_target_position()
         self.assertTrue(self.node.gripper_is_activated)
 
-        # Test the Default state
+        # Test state transition for Default
         self.node.state = State.Default
-        self.node.go_to_target_position()
-        assert not mock_regler.called
+        with patch.object(self.node, 'regler', wraps=self.node.regler) as mock_regler:
+            self.node.go_to_target_position()
+            assert not mock_regler.called
 
     def test_update_state(self):
-        """Test the update_state method."""
+        # Test state transition to Over_Box
         self.node.robot_pos = {'x': 10, 'y': 11, 'z': 12}
         self.node.box_cat = {'x': 10, 'y': 11, 'z': 12}
         self.node.update_State()
         self.assertEqual(self.node.state, State.Over_Box)
 
+        # Test state transition to Sorting
         self.node.gripper_is_activated = True
         self.node.target_position = {'x': 10, 'y': 11, 'z': self.node.pick_up_z}
         self.node.update_State()
         self.assertEqual(self.node.state, State.Sorting)
 
+        # Test state transition to Ready_to_pick_up
         self.node.gripper_is_activated = False
         self.node.target_position = {'x': 10, 'y': 11, 'z': self.node.ready_to_pick_up_z}
         self.node.update_State()
         self.assertEqual(self.node.state, State.Ready_to_pick_up)
 
+        # Test state transition to Default
         self.node.robot_pos = self.node.default_pos
         self.node.update_State()
         self.assertEqual(self.node.state, State.Default)
