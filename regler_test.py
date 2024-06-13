@@ -1,7 +1,7 @@
 import unittest
-import pytest
 from unittest.mock import MagicMock, patch
 import rclpy
+from rclpy.node import Node
 from regel_package.regler_node import regelungs_node, State
 from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
 from object_interfaces.msg import ObjectData
