@@ -102,24 +102,36 @@ class regelungs_node(Node):
         robot_cmd.accel_x = 0.0
         robot_cmd.accel_y = 0.0
         robot_cmd.accel_z = -0.01
+        self.controll_u_x = robot_cmd.accel_x
+        self.controll_u_y = robot_cmd.accel_y
+        self.controll_u_z = robot_cmd.accel_z
         robot_cmd.activate_gripper = self.gripper_is_activated
         self.robot_command_pub.publish(robot_cmd)
         time.sleep(1)
         robot_cmd.accel_x = 0.0
         robot_cmd.accel_y = -0.01
         robot_cmd.accel_z = 0.0
+        self.controll_u_x = robot_cmd.accel_x
+        self.controll_u_y = robot_cmd.accel_y
+        self.controll_u_z = robot_cmd.accel_z
         robot_cmd.activate_gripper = self.gripper_is_activated
         self.robot_command_pub.publish(robot_cmd)
         time.sleep(1)
         robot_cmd.accel_x = -0.01
         robot_cmd.accel_y = 0.0
         robot_cmd.accel_z = 0.0
+        self.controll_u_x = robot_cmd.accel_x
+        self.controll_u_y = robot_cmd.accel_y
+        self.controll_u_z = robot_cmd.accel_z
         robot_cmd.activate_gripper = self.gripper_is_activated
         self.robot_command_pub.publish(robot_cmd)
         time.sleep(1)
         robot_cmd.accel_x = 0.0
         robot_cmd.accel_y = 0.0
         robot_cmd.accel_z = 0.0
+        self.controll_u_x = robot_cmd.accel_x
+        self.controll_u_y = robot_cmd.accel_y
+        self.controll_u_z = robot_cmd.accel_z
         robot_cmd.activate_gripper = self.gripper_is_activated
         self.robot_command_pub.publish(robot_cmd)
         
@@ -267,6 +279,10 @@ class regelungs_node(Node):
        
     def sort(self, oldest_object):
         self.get_logger().info('Start sorting')
+        self.target_position['x'] = self.target_position['x']
+        self.target_position['y'] = self.target_position['y']
+        self.target_position['z'] = self.transport_z
+        
         if self.gripper_is_activated: 
             if oldest_object['class'] == 'cat':
                 self.target_position = self.box_cat
@@ -395,9 +411,10 @@ class regelungs_node(Node):
             self.robot_command_pub.publish(robot_cmd)
             return
         elif(self.gripper_is_activated == True 
-             and (abs(self.robot_pos['x'] - self.target_position['x']) < self.controlling_tolerance)
-             and (abs(self.robot_pos['y'] - self.target_position['y']) < self.controlling_tolerance) 
-             and (abs(self.robot_pos['z'] - self.pick_up_z) < self.controlling_tolerance)
+             and ((abs(self.box_cat['x'] - self.target_position['x']) < self.controlling_tolerance)
+             and (abs(self.box_cat['y'] - self.target_position['y']) < self.controlling_tolerance) )
+             or ((abs(self.box_unicorn['x'] - self.target_position['x']) < self.controlling_tolerance)
+             and (abs(self.box_unicorn['y'] - self.target_position['y']) < self.controlling_tolerance))
              and self.user_target == False):
             self.state = State.Sorting
             
@@ -460,6 +477,8 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
+
+
 
 
 
