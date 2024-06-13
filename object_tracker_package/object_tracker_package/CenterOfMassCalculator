@@ -1,0 +1,50 @@
+import cv2
+import numpy as np
+
+class CenterOfMassCalculator:
+  
+    def max_inscribed_circle(self, image, x, y, w, h):
+        # ROI ausschneiden
+        object_roi = image[y:y+h, x:x+w]
+        gray_roi = cv2.cvtColor(object_roi, cv2.COLOR_BGR2GRAY)
+        _, binary_roi = cv2.threshold(gray_roi, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    
+        # Morphologische Operationen
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        cleaned = cv2.morphologyEx(binary_roi, cv2.MORPH_OPEN, kernel, iterations=2)
+    
+        # Distanztransformation anwenden
+        dist_transform = cv2.distanceTransform(cleaned, cv2.DIST_L2, 5)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(dist_transform)
+    
+        # Zentrum und Radius des größten einbeschriebenen Kreises
+        center_x, center_y = max_loc
+        radius = int(max_val)
+    
+        return (int(center_x + x), int(center_y + y), radius)
+    
+    def calculate_center_of_mass(self, image, x, y, w, h):
+        """
+        Berechnet den Schwerpunkt des erkannten Objekts in einem Bild.
+
+        Args:
+            image (numpy.ndarray): Das gesamte Bild.
+            x (int): Die x-Koordinate des oberen linken Eckpunkts des Begrenzungsrahmens.
+            y (int): Die y-Koordinate des oberen linken Eckpunkts des Begrenzungsrahmens.
+            w (int): Die Breite des Begrenzungsrahmens.
+            h (int): Die Höhe des Begrenzungsrahmens.
+
+        Returns:
+            tuple: Die (cx, cy) Koordinaten des Schwerpunkts im gesamten Bild.
+        """
+        object_roi = image[y:y+h, x:x+w]
+        gray_roi = cv2.cvtColor(object_roi, cv2.COLOR_BGR2GRAY)
+        moments = cv2.moments(gray_roi, binaryImage=True)
+        
+        if moments['m00'] != 0:
+            cx = int(moments['m10'] / moments['m00']) + x
+            cy = int(moments['m01'] / moments['m00']) + y
+            return (cx, cy)
+        else:
+            return None
+
