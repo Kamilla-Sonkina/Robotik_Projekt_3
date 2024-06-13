@@ -1,3 +1,4 @@
+
 import unittest
 from unittest.mock import MagicMock, patch
 import rclpy
@@ -66,6 +67,7 @@ class TestRegelungsNode(unittest.TestCase):
 
     def test_sort(self):
         self.node.gripper_is_activated = True
+        self.node.target_position = {'x': 0, 'y': 0, 'z': 0}
 
         # Test with object class 'cat'
         self.node.oldest_object = {'x': 0, 'y': 0, 'class': 'cat', 'timestamp': time.time(), 'index': 0}
@@ -96,6 +98,7 @@ class TestRegelungsNode(unittest.TestCase):
 
     def test_calculate_target_position(self):
         self.node.state = State.Moving_to_object
+        self.node.target_position = {'x': 0, 'y': 0, 'z': 0}
         self.node.gripper_is_activated = True
         self.node.oldest_object = {'x': 0, 'y': 0, 'class': 'cat', 'timestamp': time.time(), 'index':0}
         self.node.calculate_target_position()
