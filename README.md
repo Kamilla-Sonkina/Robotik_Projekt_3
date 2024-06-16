@@ -11,7 +11,7 @@ build it using the colcon build command in your workspace
 `'colcon build'`
 
 ## Run
-make shure the robot is connected and run the ro45_ros2_pickrobot_serial is running. For further instructions please read the intructions in https://github.com/matl-hsk/ro45_ros2_pickrobot_serial 
+make shure the robot is connected and run the ro45_ros2_pickrobot_serial is running. For further instructions please read the documentation in https://github.com/matl-hsk/ro45_ros2_pickrobot_serial 
 
 for the regler_node run the command:
 
