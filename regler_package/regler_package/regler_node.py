@@ -510,7 +510,7 @@ class StateMachine(StateMachine):
     ready_to_pick_up_state = moving_to_object.to(ready_to_pick_up) | ready_to_pick_up.to(ready_to_pick_up)
     sort_object = ready_to_pick_up.to(sorting) | picked_up.to(sorting) | sorting.to(sorting) 
     over_box_state = sorting.to(over_box) | over_box.to(over_box) 
-    default_state = sorting.to(default) | over_box.to(default) | default.to(default)
+    default_state = sorting.to(default) | over_box.to(default) | default.to(default) | moving_to_object.to(default)
     emergency_state = idle.to(emergency) | moving_to_object.to(emergency) | ready_to_pick_up.to(emergency) | sorting.to(emergency) | over_box.to(emergency) | default.to(emergency) | picked_up.to(emergency) | emergency.to(emergency)
     picked_up_state = ready_to_pick_up.to(picked_up) | picked_up.to(picked_up)
     
@@ -537,7 +537,7 @@ class regelungs_node(Node):
         self.velocity = 0
         self.zero_position = {'x': 10, 'y': 10, 'z': 10}
         self.gripper_is_activated = False
-        self.target_position = {'x': 0, 'y': 0, 'z': 0}
+        self.target_position = {'x': None, 'y': None, 'z': None}
         self.corner = {'x': 0, 'y': 0, 'z': 0}
         self.last_calculation_time = time.time_ns()
 
@@ -546,8 +546,8 @@ class regelungs_node(Node):
         self.last_error_z = 0
         #self.kp = 9.85199 
         #self.kd_x = 6.447857
-        self.kp_x = 6.0
-        self.kd_x = 5.7 
+        self.kp_x = 7
+        self.kd_x = 12 
         self.kp_y = 3 
         self.kd_y = 8
         self.kp_z = 3 
@@ -563,17 +563,18 @@ class regelungs_node(Node):
         
         self.box_cat = {'x': 0.0854, 'y': 0.0, 'z': 0.0562} #box 1
         self.box_unicorn = {'x': 0.0012, 'y': 0.0, 'z': 0.0562} #box 2
-        self.default_pos = {'x': 0.0854, 'y': 0.0556, 'z': 0.0562}  
+        #self.default_pos = {'x': 0.0854, 'y': 0.0556, 'z': 0.0562}
+        self.default_pos = {'x': 0.0, 'y': 0.0, 'z': 0.0}  
         self.safe_pos = {'x': 0, 'y': 0, 'z': 0}
-        self.pick_up_z = 0.0791  #0.0068
-        self.ready_to_pick_up_z = 0.0714 #0.0067
+        self.pick_up_z = 0.015 #0.0791  
+        self.ready_to_pick_up_z = 0.01 #0.0714 
         self.transport_z= 0.0562
         self.last_msg_time = time.time()
         self.move_to_zero_position()
-        #time.sleep(15)
+        time.sleep(15)
         self.opposit_corner = {'x': 0.2, 'y': 0.2, 'z': self.pick_up_z}
         self.controlling_tolerance = 0.005
-        self.safe_mode = False
+        self.safe_mode = True
         self.current_time = 1
 
         
@@ -715,7 +716,8 @@ class regelungs_node(Node):
         self.velo_zaehler += 1
 
     def calculate_target_position(self):
-
+        if(self.target_position['x'] == None and self.oldest_object['class'] == None):
+            return
         #self.get_logger().info('Start calculating target position')
         if(self.user_target == True):
             self.get_logger().info(f"user target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
@@ -731,7 +733,7 @@ class regelungs_node(Node):
                 return
                 
         
-        elif(self.oldest_object['class'] == 'cat' or 'unicorn' and self.state_machine.current_state == StateMachine.moving_to_object):
+        elif((self.oldest_object['class'] == 'cat' or self.oldest_object['class'] == 'unicorn') and self.state_machine.current_state == StateMachine.moving_to_object):
             self.target_position['x'] = self.oldest_object['x'] + self.velocity * (time.time() - self.oldest_object['timestamp'])
             self.target_position['y'] = self.oldest_object['y']
             self.target_position['z'] = self.ready_to_pick_up_z
@@ -866,8 +868,8 @@ class regelungs_node(Node):
         
         control_signal = float(control_signal)
         
-        if (self.safe_mode or self.emergency):
-            control_signal = 0.1 * control_signal
+        if (self.safe_mode):
+            control_signal = 0.01 * control_signal
         
        
         control_signal = max(min(control_signal, 0.3), -0.3)
@@ -903,6 +905,8 @@ class regelungs_node(Node):
             self.state_machine.emergency_state()
             self.get_logger().info('emergency')
             return
+        elif(self.target_position['x'] == None):
+            self.state_machine.idling()
         elif ((abs(self.robot_pos['x'] - self.box_cat['x']) < self.controlling_tolerance and abs(self.robot_pos['y'] - self.box_cat['y']) < self.controlling_tolerance) or 
               (abs(self.robot_pos['x'] - self.box_unicorn['x']) < self.controlling_tolerance and abs(self.robot_pos['y'] - self.box_unicorn['y']) < self.controlling_tolerance) and 
               self.gripper_is_activated):
@@ -973,6 +977,7 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
+
 
 
 
