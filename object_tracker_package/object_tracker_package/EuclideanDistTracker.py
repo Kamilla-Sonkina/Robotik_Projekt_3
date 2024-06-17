@@ -11,6 +11,7 @@ class EuclideanDistTracker:
         self.__positions = {}  # Zeitstempel und Positionen pro ID
         self.__speed_window_size = 2  # Anzahl der Frames für das Glätten der Geschwindigkeit
         self.__speeds = {}  # Speichert Geschwindigkeiten zu jeweiliger ID
+        self.__all_speeds = []  # Speichert alle jemals berechneten Geschwindigkeiten
         self.center_of_mass_calculator = CenterOfMassCalculator()  # Initialisierung des CenterOfMassCalculator
 
     def update(self, objects_rect, frame, current_time): 
@@ -63,20 +64,15 @@ class EuclideanDistTracker:
             if total_time > 0:
                 speed = (total_dist / total_time)  
                 self.__speeds[object_id] = speed
+                self.__all_speeds.append(speed)  # Speichert die Geschwindigkeit
                 return speed
         return 0
 
     def get_average_speed(self):
-        if len(self.__speeds) > 0:
-            average_speed = sum(self.__speeds.values()) / len(self.__speeds)
+        if len(self.__all_speeds) > 0:
+            average_speed = sum(self.__all_speeds) / len(self.__all_speeds)
             return average_speed
         return 0
 
     def get_object_center(self, object_id):
         return self.__center_points.get(object_id)
-
-
-    def get_object_center(self, object_id):
-        if object_id in self.__center_points:
-            return self.__center_points[object_id]
-        return None
