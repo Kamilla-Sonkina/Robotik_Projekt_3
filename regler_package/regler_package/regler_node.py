@@ -569,7 +569,7 @@ class regelungs_node(Node):
         self.last_msg_time = time.time()
         self.move_to_zero_position()
         #time.sleep(15)
-        
+        self.opposit_corner = {'x': 0.2, 'y': 0.2, 'z': self.pick_up_z}
         self.controlling_tolerance = 0.005
         self.safe_mode = False
         self.current_time = 1
@@ -715,10 +715,11 @@ class regelungs_node(Node):
         if(self.user_target == True):
             self.get_logger().info(f"user target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
             
-        elif(self.robot_pos['z'] == self.ready_to_pick_up_z):
+        elif(self.state_machine.current_state == StateMachine.ready_to_pick_up):
             self.target_position['z'] = self.pick_up_z 
-            
+            print('pick up pose is set')
         elif(self.gripper_is_activated is True):
+            print('going in sort part')
             if(self.oldest_object['class'] == 'cat' or 'unicorn' and self.state_machine.current_state != StateMachine.sorting):
                 self.sort(self.oldest_object)
             else:
@@ -729,6 +730,8 @@ class regelungs_node(Node):
             self.target_position['x'] = self.oldest_object['x'] + self.velocity * (time.time() - self.oldest_object['timestamp'])
             self.target_position['y'] = self.oldest_object['y']
             self.target_position['z'] = self.ready_to_pick_up_z
+            self.target_position['x'] = max(min(self.target_position['x'], self.opposit_corner['x']),self.zero_position['x'])
+            self.target_position['y'] = max(min(self.target_position['y'], self.opposit_corner['y']),self.zero_position['y'])
             self.get_logger().info(f"object is at: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
        
         else: 
@@ -737,6 +740,10 @@ class regelungs_node(Node):
                 return
             else:    
                 self.target_position = self.default_pos
+
+        self.target_position['x'] = max(min(self.target_position['x'], self.opposit_corner['x']),self.zero_position['x'])
+        self.target_position['y'] = max(min(self.target_position['y'], self.opposit_corner['y']),self.zero_position['y'])
+        self.target_position['z'] = max(min(self.target_position['z'], self.pick_up_z),self.zero_position['z'])    
         self.get_logger().info(f"target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
         self.go_to_target_position()
 
@@ -958,6 +965,7 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
+
 
 
 
