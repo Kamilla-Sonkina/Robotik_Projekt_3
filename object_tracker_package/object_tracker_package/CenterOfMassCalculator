@@ -47,4 +47,3 @@ class CenterOfMassCalculator:
             return (cx, cy)
         else:
             return None
-
