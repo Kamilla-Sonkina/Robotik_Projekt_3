@@ -505,7 +505,7 @@ class StateMachine(StateMachine):
     picked_up = State('Picked up')
 
     start_idle = initializing.to(initializing)
-    idling = initializing.to(idle) | sorting.to(idle) | moving_to_object.to(idle) | idle.to(idle)
+    idling = initializing.to(idle) | sorting.to(idle) | moving_to_object.to(idle) | idle.to(idle) | emergency.to(idle)
     move_to_object = idle.to(moving_to_object) | ready_to_pick_up.to(moving_to_object) | sorting.to(moving_to_object) | moving_to_object.to(moving_to_object)
     ready_to_pick_up_state = moving_to_object.to(ready_to_pick_up) | ready_to_pick_up.to(ready_to_pick_up)
     sort_object = ready_to_pick_up.to(sorting) | picked_up.to(sorting) | sorting.to(sorting) 
@@ -527,7 +527,9 @@ class regelungs_node(Node):
         self.target_pos_sub = self.create_subscription(TargetPose, 'target_position', self.target_position_callback, 10)
         self.vel_sub = self.create_subscription(Float64, 'velocity', self.velocity_callback, 10)
         self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_position', self.arm_position_callback, 10)
-        
+        self.timer_period = 5.0 
+        self.timer = self.create_timer(self.timer_period, self.timer_callback)
+
         self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_command', 10)
         self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
         self.object_data = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
@@ -633,7 +635,10 @@ class regelungs_node(Node):
         
 
         
-        
+    def timer_callback(self):
+        if((time.time_ns()- self.last_calculation_time) > 5e90 #5e9 
+        and self.state_machine.current_state != StateMachine.initializing):
+            self.emergency_case('no position callbacks in the last 5 seconds')   
         
         
         
@@ -786,6 +791,7 @@ class regelungs_node(Node):
         self.target_position['y'] = self.target_position['y']
         self.target_position['z'] = self.transport_z
         self.regler()
+        
         if self.gripper_is_activated: 
             if oldest_object['class'] == 'cat':
                 self.target_position = self.box_cat
@@ -881,11 +887,13 @@ class regelungs_node(Node):
         else: self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
 
     def emergency_case(self, Fehlermeldung):
-        self.state = State.Emergency
+        self.state_machine.emergency_state()
         self.get_logger().info('Fehler: ' + Fehlermeldung)
         self.move_to_zero_position()
-        self.emergency = True
-        self.safe_mode = True
+        #self.emergency = True
+        #self.safe_mode = True
+        if(self.robot_pos == self.zero_position):
+            self.state_machine.idling()
         
         
             
@@ -965,7 +973,6 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
-
 
 
 
