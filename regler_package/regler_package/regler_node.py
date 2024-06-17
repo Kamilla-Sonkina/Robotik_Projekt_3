@@ -785,7 +785,7 @@ class regelungs_node(Node):
         self.target_position['x'] = self.target_position['x']
         self.target_position['y'] = self.target_position['y']
         self.target_position['z'] = self.transport_z
-        
+        self.regler()
         if self.gripper_is_activated: 
             if oldest_object['class'] == 'cat':
                 self.target_position = self.box_cat
