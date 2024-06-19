@@ -24,3 +24,4 @@ for the regler_node run the command:
 for the object tracker node connect the camera and run the command
 `
 ros2 run object_tracker_package object_tracker_node`
+find . -name "CMakeCache.txt" -type f -delete
