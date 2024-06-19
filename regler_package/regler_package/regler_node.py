@@ -303,18 +303,19 @@ class regelungs_node(Node):
                 print('picking up')
                 
                 self.target_position['z'] = self.pick_up_z
+                self.gripper_is_activated = True
                 self.regler()
                 if(self.gripper_is_activated == True):
                     self.sort(self.oldest_object)
             
             else: 
-                self.state = StateMachine.moving_to_object
+                #self.state = StateMachine.moving_to_object
                 self.regler()
        
     def sort(self, oldest_object):
         self.state_machine.sort_object()
         self.get_logger().info('Start sorting')
-        if (self.state_machine.current_state == StateMachine.picked_up):
+        if (self.state_machine.current_state == StateMachine.ready_to_pick_up):
             
             self.target_position['z'] = self.transport_z
             self.regler()
@@ -322,7 +323,7 @@ class regelungs_node(Node):
 
         
 
-        if self.gripper_is_activated: 
+        if (self.state_machine.current_state == StateMachine.picked_up):
             if oldest_object['class'] == 'cat':
                 self.target_position = self.box_cat
                 
