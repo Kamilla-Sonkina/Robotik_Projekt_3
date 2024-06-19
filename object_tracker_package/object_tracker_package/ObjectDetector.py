@@ -15,8 +15,6 @@ class ObjectDetector:
 
     def draw_boxes(self, frame, results):
         
-       
-    
         for result in results:
             if len(result) >= 6:
                 x1, y1, x2, y2 = [int(coord * 2) for coord in result[:4]]
