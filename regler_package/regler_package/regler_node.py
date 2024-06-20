@@ -17,7 +17,6 @@ class StateMachine:
             'moving_to_object': MovingToObject(node),
             'ready_to_pick_up': ReadyToPickUp(node),
             'picked_up': PickedUp(node),
-            'ready_to_sort': ReadyToSort(node),
             'sorting': Sorting(node),
             'over_box': OverBox(node),
             'default': Default(node),
@@ -86,18 +85,14 @@ class PickedUp(CustomState):
     def update_state(self):
         if (abs(self.node.target_position['x'] - self.node.robot_pos['x']) < self.node.controlling_tolerance and 
             abs(self.node.target_position['y'] - self.node.robot_pos['y']) < self.node.controlling_tolerance and 
-            (self.node.transport_z - self.node.controlling_tolerance) > self.node.robot_pos['z'] and 
+            (self.node.transport_z + self.node.controlling_tolerance) > self.node.robot_pos['z'] and 
             self.node.gripper_is_activated and 
             not self.node.user_target):
-            self.node.state_machine.transition_to('ready_to_sort')
+            self.node.state_machine.transition_to('sorting')
         if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
             self.node.state_machine.transition_to('emergency')
             self.node.emergency_case('No position callbacks in the last 5 seconds')
 
-class ReadyToSort(CustomState):
-    def update_state(self):
-        if self.node.robot_pos['z'] < self.node.transport_z:
-           self.node.state_machine.transition_to('sorting') 
 
 class Sorting(CustomState):
     def update_state(self):
@@ -107,17 +102,20 @@ class Sorting(CustomState):
              abs(self.node.robot_pos['y'] - self.node.box_unicorn['y']) < self.node.controlling_tolerance) and 
             self.node.gripper_is_activated):
             self.node.state_machine.transition_to('over_box')
+            
         if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
             self.node.state_machine.transition_to('emergency')
             self.node.emergency_case('No position callbacks in the last 5 seconds')
 
 class OverBox(CustomState):
     def update_state(self):
-        if not self.node.gripper_is_activated:
+        if self.node.gripper_is_activated == False:
             self.node.state_machine.transition_to('idle')
+        
         if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
             self.node.state_machine.transition_to('emergency')
             self.node.emergency_case('No position callbacks in the last 5 seconds')
+
 
 class Default(CustomState):
     def update_state(self):
@@ -281,8 +279,8 @@ class regelungs_node(Node):
     def arm_position_callback(self, msg):
         self.last_calculation_time = self.current_time
         self.current_time = time.time_ns() / 10e9 
-        print(self.current_time)
-        print(self.last_calculation_time)
+
+        self.get_logger().debug(f"last time: {self.last_calculation_time}, new time: {self.current_time}", throttle_duration_sec = 1)
         
         self.get_logger().debug(f"State: {self.state_machine.current_state}", throttle_duration_sec = 1)
         if (self.state_machine.current_state == self.state_machine.states['initializing']):
@@ -318,19 +316,23 @@ class regelungs_node(Node):
         
 
     def object_data_callback(self, msg):
+        self.get_logger().debug(f'oldest object is: {self.oldest_object}')
         self.user_target = False
         self.object_data['x'] = msg.object_pos_x + self.zero_position['x']
         self.object_data['y'] = msg.object_pos_y + self.zero_position['y']
         self.object_data['class'] = msg.object_class
         self.object_data['timestamp'] = msg.timestamp_value
         self.object_data['index'] = msg.index_value
+        self.get_logger().debug(f'oldest object is: {self.oldest_object}')
         if not any(obj['index'] == self.object_data['index'] for obj in self.queue):
             self.enqueue(self.object_data)
+            self.get_logger().debug(f'received object date enqueuing now')
         
         if(self.state_machine.current_state == self.state_machine.states['idle'] 
            or self.state_machine.current_state == self.state_machine.states['default']):
+            self.get_logger().debug(f'robot is in idle or default dequeuing object now')
             self.dequeue()
-        
+        self.get_logger().debug(f'oldest object is: {self.oldest_object}')
    
         
        
@@ -340,31 +342,37 @@ class regelungs_node(Node):
         self.velo_zaehler += 1
 
     def calculate_target_position(self):
+        if(self.state_machine.current_state == self.state_machine.states['over_box']):
+            self.sort(self.oldest_object)
+            return
         if(self.target_position['x'] == None and self.oldest_object['class'] == None):
             return
-        self.get_logger().debug('Start calculating target position')
-        if(self.user_target == True):
-            self.get_logger().debug(f"user target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
-            
-        elif (self.state_machine.current_state == self.state_machine.states['ready_to_pick_up'] 
-            and self.target_position['z'] != self.pick_up_z):
-            self.target_position['z'] = self.pick_up_z 
-            print('pick up pose is set')
-        elif(self.gripper_is_activated is True):
-            print('going in sort part')
-            if self.oldest_object['class'] in ['cat', 'unicorn'] and self.state_machine.current_state != self.state_machine.states['sorting']:
-                self.sort(self.oldest_object)
-            else:
-                return
+        if(self.oldest_object['class'] is not None):
+            self.get_logger().debug('Start calculating target position')
+            if(self.user_target == True):
+                self.get_logger().debug(f"user target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
                 
+            elif (self.state_machine.current_state == self.state_machine.states['ready_to_pick_up'] 
+                and self.target_position['z'] != self.pick_up_z):
+                self.target_position['z'] = self.pick_up_z 
+                self.get_logger().debug(f'pick up pose is set')
+            elif(self.gripper_is_activated is True):
+                
+                if (self.oldest_object['class'] == 'cat' or self.oldest_object['class'] == 'unicorn'):
+                    self.get_logger().debug(f'going in sort part')
+                    self.sort(self.oldest_object)
+                
+                else:
+                    return
+                    
+            
+            elif((self.oldest_object['class'] == 'cat' or self.oldest_object['class'] == 'unicorn') 
+                and self.state_machine.current_state == self.state_machine.states['moving_to_object']):
+                self.target_position['x'] = self.oldest_object['x'] + self.velocity * (time.time() - self.oldest_object['timestamp'])
+                self.target_position['y'] = self.oldest_object['y']
+                self.target_position['z'] = self.ready_to_pick_up_z
+                self.get_logger().debug(f"object is at: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
         
-        elif((self.oldest_object['class'] == 'cat' or self.oldest_object['class'] == 'unicorn') 
-             and self.state_machine.current_state == self.state_machine.states['moving_to_object']):
-            self.target_position['x'] = self.oldest_object['x'] + self.velocity * (time.time() - self.oldest_object['timestamp'])
-            self.target_position['y'] = self.oldest_object['y']
-            self.target_position['z'] = self.ready_to_pick_up_z
-            self.get_logger().debug(f"object is at: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
-       
         else: 
             self.update_state()
             if self.state_machine.current_state == self.state_machine.states['idle']:
@@ -385,8 +393,7 @@ class regelungs_node(Node):
             self.regler()
             return
 
-        elif(self.state_machine.current_state == self.state_machine.states['ready_to_sort'] 
-             or self.state_machine.current_state == self.state_machine.states['sorting']
+        elif(self.state_machine.current_state == self.state_machine.states['sorting']
              or self.state_machine.current_state == self.state_machine.states['over_box']
              or self.state_machine.current_state == self.state_machine.states['picked_up']
              or self.gripper_is_activated):
@@ -396,7 +403,7 @@ class regelungs_node(Node):
         
         
         elif(self.state_machine.current_state == self.state_machine.states['ready_to_pick_up']): 
-            print('picking up')
+            self.get_logger().debug(f'picking up')
             
             self.target_position['z'] = self.pick_up_z
             self.gripper_is_activated = True
@@ -415,7 +422,7 @@ class regelungs_node(Node):
 
         
 
-        if (self.state_machine.current_state == self.state_machine.states['ready_to_sort']):
+        if (self.state_machine.current_state == self.state_machine.states['sorting']):
             if oldest_object['class'] == 'cat':
                 self.target_position = self.box_cat
                 
@@ -424,9 +431,14 @@ class regelungs_node(Node):
                 
             else: 
                 self.target_position = self.default_pos
-            if self.state_machine.current_state == self.state_machine.states['over_box']:
-                 
-                self.oldest_object = self.dequeue()
+        elif self.state_machine.current_state == self.state_machine.states['over_box']:
+            robot_cmd = RobotCmd()
+            self.gripper_is_activated = False
+            robot_cmd.activate_gripper = self.gripper_is_activated
+            self.robot_command_pub.publish(robot_cmd) 
+            self.get_logger().debug(f'deactivating gripper now gripper is: {self.gripper_is_activated}')
+            self.update_state()
+            self.oldest_object = self.dequeue()
         elif (self.state_machine.current_state == self.state_machine.states['picked_up']):
             
             self.target_position['z'] = self.transport_z
@@ -434,6 +446,7 @@ class regelungs_node(Node):
         self.regler()        
 
     def regler(self):
+        self.get_logger().debug(f'target position is: {self.target_position}', throttle_duration_sec = 1)
         self.get_logger().debug('Start controlling')
         
        
@@ -493,12 +506,18 @@ class regelungs_node(Node):
     
     def enqueue(self, object_data):
         self.queue.append(object_data)
+        self.get_logger().debug(f'appended object')
     
     def dequeue(self):
         if(len(self.queue) != 0):
             self.oldest_object = self.queue.pop(0)
+            self.get_logger().debug(f'poped object')
             self.state_machine.transition_to('moving_to_object')
             self.calculate_target_position()
+        else:
+            
+            self.get_logger().info(f'no objects in queue')
+            
         
     def emergency_case(self, Fehlermeldung):
         self.state_machine.transition_to('emergency')
@@ -524,7 +543,6 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
-
 
 
 
