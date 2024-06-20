@@ -6,7 +6,7 @@ from object_interfaces.msg import ObjectData
 from std_msgs.msg import Float64
 import time
 from builtin_interfaces.msg import Time
-from statemachine import StateMachine as BaseStateMachine, State
+
 
 class StateMachine:
     def __init__(self, node):
@@ -206,7 +206,7 @@ class regelungs_node(Node):
         self.controll_u_z = 0
         self.callback_period = 5e90
         
-        self.get_logger().info(f"state: {self.state_machine.current_state}")
+        self.get_logger().debug(f"state: {self.state_machine.current_state}")
         
 
       
@@ -284,7 +284,7 @@ class regelungs_node(Node):
         print(self.current_time)
         print(self.last_calculation_time)
         
-        self.get_logger().info(f"State: {self.state_machine.current_state}")
+        self.get_logger().debug(f"State: {self.state_machine.current_state}", throttle_duration_sec = 1)
         if (self.state_machine.current_state == self.state_machine.states['initializing']):
             self.robot_pos['x'] = round(-msg.pos_x, 3)
             self.robot_pos['y'] = round(msg.pos_y, 3)
@@ -298,7 +298,7 @@ class regelungs_node(Node):
             self.safe_pos = self.adjust_box_position(self.safe_pos)
             self.pick_up_z = self.zero_position['z'] + self.pick_up_z
             self.ready_to_pick_up_z = self.zero_position['z'] + self.ready_to_pick_up_z
-            self.get_logger().info(f"zero position is: x={self.zero_position['x']}, y={self.zero_position['y']}, z={self.zero_position['z']}")
+            self.get_logger().debug(f"zero position is: x={self.zero_position['x']}, y={self.zero_position['y']}, z={self.zero_position['z']}")
             self.state_machine.transition_to('idle')
             self.get_logger().info('initializing finished')
             return
@@ -312,7 +312,7 @@ class regelungs_node(Node):
         
         
         
-        self.get_logger().debug(f"robot position is: x={self.robot_pos['x']}, y={self.robot_pos['y']}, z={self.robot_pos['z']}")
+        self.get_logger().debug(f"robot position is: x={self.robot_pos['x']}, y={self.robot_pos['y']}, z={self.robot_pos['z']}", throttle_duration_sec = 1)
         self.last_msg_time = self.current_time
         self.calculate_target_position()
         
@@ -342,9 +342,9 @@ class regelungs_node(Node):
     def calculate_target_position(self):
         if(self.target_position['x'] == None and self.oldest_object['class'] == None):
             return
-        #self.get_logger().info('Start calculating target position')
+        self.get_logger().debug('Start calculating target position')
         if(self.user_target == True):
-            self.get_logger().info(f"user target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
+            self.get_logger().debug(f"user target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
             
         elif (self.state_machine.current_state == self.state_machine.states['ready_to_pick_up'] 
             and self.target_position['z'] != self.pick_up_z):
@@ -363,7 +363,7 @@ class regelungs_node(Node):
             self.target_position['x'] = self.oldest_object['x'] + self.velocity * (time.time() - self.oldest_object['timestamp'])
             self.target_position['y'] = self.oldest_object['y']
             self.target_position['z'] = self.ready_to_pick_up_z
-            self.get_logger().info(f"object is at: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
+            self.get_logger().debug(f"object is at: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
        
         else: 
             self.update_state()
@@ -372,14 +372,14 @@ class regelungs_node(Node):
             else:    
                 self.target_position = self.default_pos
 
-        self.get_logger().info(f"target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
+        self.get_logger().debug(f"target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
         self.go_to_target_position()
 
         
 
     def go_to_target_position(self):
-        self.get_logger().info(f"going from robot position x:{self.robot_pos['x']}, y: {self.robot_pos['y']}, z: {self.robot_pos['z']}")
-        self.get_logger().info(f"Start going to target position x:{self.target_position['x']}, y: {self.target_position['y']}, z: {self.target_position['z']}")
+        self.get_logger().debug(f"going from robot position x:{self.robot_pos['x']}, y: {self.robot_pos['y']}, z: {self.robot_pos['z']}")
+        self.get_logger().debug(f"Start going to target position x:{self.target_position['x']}, y: {self.target_position['y']}, z: {self.target_position['z']}")
        
         if(self.user_target == True or self.state_machine.current_state == self.state_machine.states['moving_to_object']):
             self.regler()
@@ -409,7 +409,7 @@ class regelungs_node(Node):
        
     def sort(self, oldest_object):
         #self.state_machine.sort_object()
-        self.get_logger().info('Start sorting')
+        self.get_logger().debug('Start sorting')
         
         
 
@@ -434,16 +434,13 @@ class regelungs_node(Node):
         self.regler()        
 
     def regler(self):
-        #self.get_logger().info('Start controlling')
-        print(self.current_time)
-        print(self.last_calculation_time)
+        self.get_logger().debug('Start controlling')
+        
        
         differenz_x = self.target_position['x'] - self.robot_pos['x']    
         differenz_y = self.target_position['y'] - self.robot_pos['y']  
         differenz_z = self.target_position['z'] - self.robot_pos['z']   
-        print(differenz_x)
-        #print(differenz_y)
-        #print(differenz_z)
+        
 
         
     
@@ -455,20 +452,18 @@ class regelungs_node(Node):
         u_x = self.compute_pd(differenz_x, self.last_error_x, dt, self.kp_x, self.kd_x)
         self.last_error_x = differenz_x
         self.controll_u_x = u_x
-        #print(u_x)
-        self.get_logger().info(f"differenz x:{differenz_x}, u_x: {u_x}, last error {self.last_error_x}, kd: {self.kd_x}, kp: {self.kp_x}")
-        self.get_logger().info(f"robot x:{self.robot_pos['x']},")
+        self.get_logger().debug(f"differenz x:{differenz_x}, u_x: {u_x}, last error {self.last_error_x}, kd: {self.kd_x}, kp: {self.kp_x}, robot x:{self.robot_pos['x']},")
         
-
+      
         u_y = self.compute_pd(differenz_y, self.last_error_y, dt, self.kp_y, self.kd_y)
         self.last_error_y = differenz_y
         self.controll_u_y = u_y
-        #print(u_y)
+        self.get_logger().debug(f"differenz y:{differenz_y}, u_y: {u_y}, last error {self.last_error_y}, kd: {self.kd_y}, kp: {self.kp_y}, robot y:{self.robot_pos['y']},")
         
         u_z = self.compute_pd(differenz_z, self.last_error_z, dt, self.kp_z, self.kd_z)
         self.last_error_z = differenz_z
         self.controll_u_z = u_z
-        #print(u_z)
+        self.get_logger().debug(f"differenz z:{differenz_z}, u_z: {u_z}, last error {self.last_error_z}, kd: {self.kd_z}, kp: {self.kp_z}, robot z:{self.robot_pos['z']},")
      
         robot_cmd = RobotCmd()
         robot_cmd.accel_x = u_x
@@ -476,7 +471,7 @@ class regelungs_node(Node):
         robot_cmd.accel_z = u_z
         robot_cmd.activate_gripper = self.gripper_is_activated
         self.robot_command_pub.publish(robot_cmd)
-        self.get_logger().info('published robot_cmd')
+        self.get_logger().debug('published robot_cmd')
         self.update_state()
 
 
@@ -491,11 +486,6 @@ class regelungs_node(Node):
         
         control_signal = float(control_signal)
         
-        
-           
-        
-       
-        #control_signal = max(min(control_signal, 0.3), -0.3)
         
         return control_signal
 
@@ -512,18 +502,16 @@ class regelungs_node(Node):
         
     def emergency_case(self, Fehlermeldung):
         self.state_machine.transition_to('emergency')
-        self.get_logger().info('Fehler: ' + Fehlermeldung)
+        self.get_logger().warn('Fehler: ' + Fehlermeldung)
         self.move_to_zero_position()
         time.sleep(30)
-        #self.emergency = True
-        #self.safe_mode = True
         if(self.robot_pos == self.zero_position):
             self.state_machine.transition_to('idle')
         
         
             
     def update_state(self):
-        self.get_logger().info('updating state')
+        self.get_logger().info(f'updating state to: {self.state_machine.current_state}')
         self.state_machine.update_state()
         
             
@@ -536,6 +524,8 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
+
+
 
 
 
