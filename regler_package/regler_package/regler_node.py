@@ -316,14 +316,13 @@ class regelungs_node(Node):
         
 
     def object_data_callback(self, msg):
-        self.get_logger().debug(f'oldest object is: {self.oldest_object}')
         self.user_target = False
         self.object_data['x'] = msg.object_pos_x + self.zero_position['x']
         self.object_data['y'] = msg.object_pos_y + self.zero_position['y']
         self.object_data['class'] = msg.object_class
         self.object_data['timestamp'] = msg.timestamp_value
         self.object_data['index_value'] = msg.index_value
-        self.get_logger().debug(f'oldest object is: {self.oldest_object}')
+        
         if not any(obj['index'] == self.object_data['index'] for obj in self.queue):
             self.enqueue(self.object_data)
             self.get_logger().debug(f'received object date enqueuing now')
@@ -340,6 +339,8 @@ class regelungs_node(Node):
     def velocity_callback(self, msg):
         self.velocity = (self.velocity * self.velo_zaehler + msg.data) / (self.velo_zaehler + 1)
         self.velo_zaehler += 1
+        self.get_logger().debug(f'input velocity is: {msg.data}')
+        self.get_logger().debug(f'calculated velocity is: {self.velocity}')
 
     def calculate_target_position(self):
         if(self.state_machine.current_state == self.state_machine.states['over_box']):
@@ -368,7 +369,7 @@ class regelungs_node(Node):
             
             elif((self.oldest_object['class'] == 'cat' or self.oldest_object['class'] == 'unicorn') 
                 and self.state_machine.current_state == self.state_machine.states['moving_to_object']):
-                self.target_position['x'] = self.oldest_object['x'] + self.velocity * (time.time() - self.oldest_object['timestamp'])
+                self.target_position['x'] = self.oldest_object['x'] - self.velocity * (time.time() - self.oldest_object['timestamp']) * 0.01
                 self.target_position['y'] = self.oldest_object['y']
                 self.target_position['z'] = self.ready_to_pick_up_z
                 self.get_logger().debug(f"object is at: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
@@ -547,7 +548,6 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
-
 
 
 
