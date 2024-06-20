@@ -149,7 +149,7 @@ class regelungs_node(Node):
 
         self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_command', 10)
         self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
-        self.object_data = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
+       
         self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
         self.velocity = 0
         self.zero_position = {'x': None, 'y': None, 'z': None}
@@ -157,7 +157,7 @@ class regelungs_node(Node):
         self.target_position = {'x': None, 'y': None, 'z': None}
         self.corner = {'x': 0, 'y': 0, 'z': 0}
         self.last_calculation_time = time.time_ns()
-
+        self.object_data = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index_value': None}
         self.last_error_x = 0
         self.last_error_y = 0
         self.last_error_z = 0
@@ -322,7 +322,7 @@ class regelungs_node(Node):
         self.object_data['y'] = msg.object_pos_y + self.zero_position['y']
         self.object_data['class'] = msg.object_class
         self.object_data['timestamp'] = msg.timestamp_value
-        self.object_data['index'] = msg.index_value
+        self.object_data['index_value'] = msg.index_value
         self.get_logger().debug(f'oldest object is: {self.oldest_object}')
         if not any(obj['index'] == self.object_data['index'] for obj in self.queue):
             self.enqueue(self.object_data)
@@ -509,15 +509,19 @@ class regelungs_node(Node):
         self.get_logger().debug(f'appended object')
     
     def dequeue(self):
-        if(len(self.queue) != 0):
-            self.oldest_object = self.queue.pop(0)
+        if len(self.queue) != 0:
+            popped_object = self.queue.pop(0)
+            self.oldest_object['x'] = popped_object.get('x', None)
+            self.oldest_object['y'] = popped_object.get('y', None)
+            self.oldest_object['class'] = popped_object.get('class', None)
+            self.oldest_object['timestamp'] = popped_object.get('timestamp', None)
+            self.oldest_object['index_value'] = popped_object.get('index_value', None)
+            
             self.get_logger().debug(f'poped object')
             self.state_machine.transition_to('moving_to_object')
             self.calculate_target_position()
         else:
-            
             self.get_logger().info(f'no objects in queue')
-            
         
     def emergency_case(self, Fehlermeldung):
         self.state_machine.transition_to('emergency')
