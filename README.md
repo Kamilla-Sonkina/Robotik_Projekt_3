@@ -8,7 +8,7 @@ download the regler_package, the object_tracker_package, the object_interfaces, 
 ## Build:
 
 build it using the colcon build command in your workspace
-`'colcon build'`
+`colcon build`
 
 ## Run
 make shure the robot is connected and run the ro45_ros2_pickrobot_serial is running. 
