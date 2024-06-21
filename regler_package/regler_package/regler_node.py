@@ -535,10 +535,10 @@ class regelungs_node(Node):
         
             
     def update_state(self):
-        self.get_logger().info(f'updating state to: {self.state_machine.current_state}')
+        self.get_logger().debug(f'updating state to: {self.state_machine.current_state}')
         self.state_machine.update_state()
-        
-            
+     
+           
 
 def main(args=None):
     rclpy.init(args=args)
