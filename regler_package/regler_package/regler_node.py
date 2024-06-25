@@ -76,7 +76,7 @@ class ReadyToPickUp(CustomState):
     def update_state(self):
         if (abs(self.node.target_position['x'] - self.node.robot_pos['x']) < self.node.controlling_tolerance and 
             abs(self.node.target_position['y'] - self.node.robot_pos['y']) < self.node.controlling_tolerance and 
-            abs(self.node.pick_up_z - self.node.robot_pos['z']) <= self.node.controlling_tolerance and 
+            abs(self.node.pick_up_z - self.node.robot_pos['z']) <= (self.node.controlling_tolerance) and 
             self.node.gripper_is_activated and 
             not self.node.user_target):
             self.node.state_machine.transition_to('picked_up')
@@ -218,7 +218,10 @@ class regelungs_node(Node):
         box['z'] -= self.zero_position['z']
         return box
 
-    
+    """
+    move_to_zero_position let the robot go to the corner where switches are placed. It gives a start point for the robot and 
+    defines the coordinate zero point
+    """
 
     def move_to_zero_position(self):
         robot_cmd = RobotCmd()
@@ -297,11 +300,11 @@ class regelungs_node(Node):
             self.zero_position['y'] = self.robot_pos['y']
             self.zero_position['z'] = self.robot_pos['z']
             self.default_position = self.zero_position
-            self.box_unicorn =  self.adjust_box_position(self.box_unicorn)
-            self.box_cat =  self.adjust_box_position(self.box_cat)
-            self.pick_up_z = self.pick_up_z + self.zero_position['z'] 
-            self.opposit_corner['z'] -= self.zero_position['z']
-            self.ready_to_pick_up_z = self.ready_to_pick_up_z - self.zero_position['z'] 
+            #self.box_unicorn =  self.adjust_box_position(self.box_unicorn)
+            #self.box_cat =  self.adjust_box_position(self.box_cat)
+            #self.pick_up_z -=  self.zero_position['z'] 
+            #self.opposit_corner['z'] -= self.zero_position['z']
+            #self.ready_to_pick_up_z -=  self.zero_position['z'] 
             self.get_logger().debug(f"zero position is: x={self.zero_position['x']}, y={self.zero_position['y']}, z={self.zero_position['z']}")
             self.state_machine.transition_to('idle')
             self.get_logger().info('initializing finished')
@@ -372,9 +375,9 @@ class regelungs_node(Node):
             
             elif((self.oldest_object['class'] == 'cat' or self.oldest_object['class'] == 'unicorn') 
                 and self.state_machine.current_state == self.state_machine.states['moving_to_object']):
-                self.target_position['x'] = self.oldest_object['x'] - self.velocity * (time.time() - self.oldest_object['timestamp']) * 0.01
-                self.target_position['y'] = self.oldest_object['y']
-                self.target_position['z'] = self.ready_to_pick_up_z
+                self.target_position['x'] = (self.oldest_object['x'] - self.velocity * (time.time() - self.oldest_object['timestamp']) * 0.01) 
+                self.target_position['y'] = self.oldest_object['y'] 
+                self.target_position['z'] = self.ready_to_pick_up_z 
                 self.get_logger().debug(f"object is at: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
         
         else: 
@@ -532,10 +535,10 @@ class regelungs_node(Node):
         
             
     def update_state(self):
-        self.get_logger().debug(f'updating state to: {self.state_machine.current_state}')
+        self.get_logger().info(f'updating state to: {self.state_machine.current_state}')
         self.state_machine.update_state()
-     
-           
+        
+            
 
 def main(args=None):
     rclpy.init(args=args)
