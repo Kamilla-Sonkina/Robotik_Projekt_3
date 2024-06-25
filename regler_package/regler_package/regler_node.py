@@ -170,12 +170,12 @@ class regelungs_node(Node):
         self.last_error_z = 0
         #self.kp = 9.85199 
         #self.kd_x = 6.447857
-        self.kp_x = 0.985199
+        self.kp_x = 0.98
         self.kd_x = 0.49
-        self.kp_y = 0.3
-        self.kd_y = 0.4
-        self.kp_z = 0.5 
-        self.kd_z = 0.5
+        self.kp_y = 0.98
+        self.kd_y = 0.49
+        self.kp_z = 0.985199
+        self.kd_z = 0.51
         self.n = 100
         self.first_arm_pos = 0
         
@@ -189,9 +189,9 @@ class regelungs_node(Node):
         
           
         
-        self.pick_up_z = 0.0791  
+        self.pick_up_z = 0.081  
         self.ready_to_pick_up_z = 0.0714 
-        self.transport_z= 0.0562
+        self.transport_z= 0.055
         self.last_msg_time = time.time()
         self.move_to_zero_position()
         time.sleep(25)
@@ -535,7 +535,7 @@ class regelungs_node(Node):
         
             
     def update_state(self):
-        self.get_logger().info(f'updating state to: {self.state_machine.current_state}')
+        self.get_logger().debug(f'updating state to: {self.state_machine.current_state}')
         self.state_machine.update_state()
         
             
@@ -548,7 +548,6 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
-
 
 
 
