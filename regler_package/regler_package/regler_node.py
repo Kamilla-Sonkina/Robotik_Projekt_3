@@ -266,7 +266,7 @@ class regelungs_node(Node):
 
         
     def timer_callback(self):
-        if((time.time_ns()- self.last_calculation_time) > 5e90 #5e9 
+        if((time.time_ns()- self.last_calculation_time) > self.callback_period
         and self.state_machine.current_state != self.state_machine.states['initializing']):
             self.emergency_case('no position callbacks in the last 5 seconds')   
         
@@ -301,12 +301,6 @@ class regelungs_node(Node):
             self.zero_position['x'] = self.robot_pos['x']
             self.zero_position['y'] = self.robot_pos['y']
             self.zero_position['z'] = self.robot_pos['z']
-            
-            #self.box_unicorn =  self.adjust_box_position(self.box_unicorn)
-            #self.box_cat =  self.adjust_box_position(self.box_cat)
-            #self.pick_up_z -=  self.zero_position['z'] 
-            #self.opposit_corner['z'] -= self.zero_position['z']
-            #self.ready_to_pick_up_z -=  self.zero_position['z'] 
             self.get_logger().debug(f"zero position is: x={self.zero_position['x']}, y={self.zero_position['y']}, z={self.zero_position['z']}")
             self.state_machine.transition_to('idle')
             self.get_logger().info('initializing finished')
@@ -325,14 +319,13 @@ class regelungs_node(Node):
 
     def object_data_callback(self, msg):
         self.user_target = False
-        self.object_data['x'] = ( - 0.000203 * msg.object_pos_x) + 0.378452
+        self.object_data['x'] = (-0.000203 * msg.object_pos_x) + 0.378452
         self.object_data['y'] = (msg.object_pos_y * 10e-5) + 0.01524
         self.object_data['class'] = msg.object_class
         self.object_data['timestamp'] = msg.timestamp_value
         self.object_data['index'] = msg.index_value
         if(self.object_data['index'] == self.oldest_object['index']):
             self.oldest_object['x'] = self.object_data['x']
-            self.oldest_object['y'] = self.object_data['y']
             self.oldest_object['timestamp'] = self.object_data['timestamp']
 
         if (not any(obj['index'] == self.object_data['index'] for obj in self.queue) 
@@ -387,6 +380,7 @@ class regelungs_node(Node):
                 self.target_position['x'] = (self.oldest_object['x'] - self.velocity * (time.time() - self.oldest_object['timestamp']) * 0.01) 
                 self.target_position['y'] = self.oldest_object['y'] 
                 self.target_position['z'] = self.ready_to_pick_up_z 
+                self.oldest_object['timestamp'] = time.time()
                 self.get_logger().debug(f"object is at: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
         
         else: 
@@ -501,7 +495,6 @@ class regelungs_node(Node):
         
         
         derivative = (error - last_error) / dt
-        #derivative = self.n * derivative + (1 - self.n) * derivative
         
         control_signal = kp * error + kd * derivative
         
@@ -564,4 +557,3 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
-
