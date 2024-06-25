@@ -50,7 +50,7 @@ class Idle(CustomState):
         if ((abs(self.node.target_position['x'] - self.node.robot_pos['x']) >= self.node.controlling_tolerance or 
              abs(self.node.target_position['y'] - self.node.robot_pos['y']) >= self.node.controlling_tolerance or 
              abs(self.node.target_position['z'] - self.node.robot_pos['z']) >= self.node.controlling_tolerance) and 
-             ((not self.node.gripper_is_activated and self.node.oldest_object is not None) or self.node.user_target)):
+             ((not self.node.gripper_is_activated and self.node.oldest_object['sorted'] == False) or self.node.user_target)):
             self.node.state_machine.transition_to('moving_to_object')
         if (self.node.target_position['x'] == self.node.default_position['x'] 
             and self.node.target_position['y'] == self.node.default_position['y']
@@ -128,7 +128,7 @@ class Default(CustomState):
         if ((abs(self.node.target_position['x'] - self.node.robot_pos['x']) >= self.node.controlling_tolerance or 
              abs(self.node.target_position['y'] - self.node.robot_pos['y']) >= self.node.controlling_tolerance or 
              abs(self.node.target_position['z'] - self.node.robot_pos['z']) >= self.node.controlling_tolerance) and 
-             ((not self.node.gripper_is_activated and self.node.oldest_object is not None) or self.node.user_target)):
+             ((not self.node.gripper_is_activated and self.node.oldest_object['sorted'] == False) or self.node.user_target)):
             self.node.state_machine.transition_to('moving_to_object')
         
         if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
@@ -158,10 +158,10 @@ class regelungs_node(Node):
         self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_command', 10)
         self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
        
-        self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None}
+        self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None, 'sorted' : False}
         self.velocity = 0
         self.zero_position = {'x': None, 'y': None, 'z': None}
-        self.default_position = {'x': None, 'y': None, 'z': None}
+        self.default_position = {'x': 0, 'y': 0, 'z': 0}
         self.gripper_is_activated = False
         self.target_position = {'x': None, 'y': None, 'z': None}
         
@@ -176,7 +176,7 @@ class regelungs_node(Node):
         self.kd_x = 0.49
         self.kp_y = 0.98
         self.kd_y = 0.49
-        self.kp_z = 0.985199
+        self.kp_z = 2.5 #0.985199
         self.kd_z = 0.51
         self.n = 100
         self.first_arm_pos = 0
@@ -186,8 +186,8 @@ class regelungs_node(Node):
 
         self.queue = []
 
-        self.box_cat = {'x': 0.0854, 'y': 0.0, 'z': 0.0562} 
-        self.box_unicorn = {'x': 0.0012, 'y': 0.0, 'z': 0.0562} 
+        self.box_cat = {'x': 0.0854, 'y': 0.001, 'z': 0.0562} 
+        self.box_unicorn = {'x': 0.0012, 'y': 0.001, 'z': 0.0562} 
         
           
         
@@ -209,7 +209,7 @@ class regelungs_node(Node):
         self.controll_u_y = 0
         self.controll_u_z = 0
         self.callback_period = 5e90
-        
+        self.black_list_objects = []
         self.get_logger().debug(f"state: {self.state_machine.current_state}")
         
 
@@ -301,7 +301,7 @@ class regelungs_node(Node):
             self.zero_position['x'] = self.robot_pos['x']
             self.zero_position['y'] = self.robot_pos['y']
             self.zero_position['z'] = self.robot_pos['z']
-            self.default_position = self.zero_position
+            
             #self.box_unicorn =  self.adjust_box_position(self.box_unicorn)
             #self.box_cat =  self.adjust_box_position(self.box_cat)
             #self.pick_up_z -=  self.zero_position['z'] 
@@ -330,7 +330,14 @@ class regelungs_node(Node):
         self.object_data['class'] = msg.object_class
         self.object_data['timestamp'] = msg.timestamp_value
         self.object_data['index'] = msg.index_value
-        if not any(obj['index'] == self.object_data['index'] for obj in self.queue):
+        if(self.object_data['index'] == self.oldest_object['index']):
+            self.oldest_object['x'] = self.object_data['x']
+            self.oldest_object['y'] = self.object_data['y']
+            self.oldest_object['timestamp'] = self.object_data['timestamp']
+
+        if (not any(obj['index'] == self.object_data['index'] for obj in self.queue) 
+            and self.object_data['index'] not in self.black_list_objects
+            and self.oldest_object['index'] != self.object_data['index']):
             self.enqueue(self.object_data)
             self.get_logger().debug(f'received object date enqueuing now')
         
@@ -342,7 +349,7 @@ class regelungs_node(Node):
    
         
     def velocity_callback(self, msg):
-        self.velocity = round((self.velocity * self.velo_zaehler + (0.1 * msg.data)) / (self.velo_zaehler + 1), 2)
+        self.velocity = round((self.velocity * self.velo_zaehler + msg.data) / (self.velo_zaehler + 1), 2)
         self.velo_zaehler += 1
         self.get_logger().debug(f'input velocity is: {msg.data}')
         self.get_logger().debug(f'calculated velocity is: {self.velocity}')
@@ -425,10 +432,14 @@ class regelungs_node(Node):
         
             if (self.state_machine.current_state == self.state_machine.states['sorting']):
                 if oldest_object['class'] == 'cat':
-                    self.target_position = self.box_cat
+                    self.target_position['x'] = self.box_cat['x']
+                    self.target_position['y'] = self.box_cat['y']
+                    self.target_position['z'] = self.box_cat['z']
                     
                 elif oldest_object['class'] == 'unicorn':
-                    self.target_position = self.box_unicorn
+                    self.target_position['x'] = self.box_unicorn['x']
+                    self.target_position['y'] = self.box_unicorn['y']
+                    self.target_position['z'] = self.box_unicorn['z']
                     
                 
             elif self.state_machine.current_state == self.state_machine.states['over_box']:
@@ -441,7 +452,8 @@ class regelungs_node(Node):
                 self.target_position['x'] = self.default_position['x']
                 self.target_position['y'] = self.default_position['y']
                 self.target_position['z'] = self.default_position['z']
-                self.oldest_object = self.dequeue()
+                
+                self.dequeue()
             elif (self.state_machine.current_state == self.state_machine.states['picked_up']):
                 
                 self.target_position['z'] = self.transport_z
@@ -505,11 +517,12 @@ class regelungs_node(Node):
         self.get_logger().debug(f'appended object')
     
     def dequeue(self):
+        self.oldest_object['sorted'] = True
+        self.black_list_objects.append(self.oldest_object['index']) 
         if len(self.queue) != 0:
             popped_object = self.queue.pop(0)
 
-            if self.oldest_object is None:
-                self.oldest_object = {}
+            
         
             if isinstance(popped_object, dict):
                 self.oldest_object['x'] = popped_object.get('x', None)
@@ -517,6 +530,7 @@ class regelungs_node(Node):
                 self.oldest_object['class'] = popped_object.get('class', None)
                 self.oldest_object['timestamp'] = popped_object.get('timestamp', None)
                 self.oldest_object['index'] = popped_object.get('index', None)
+                self.oldest_object['sorted'] = False
                 
                 self.get_logger().debug('Popped object')
                 self.state_machine.transition_to('moving_to_object')
@@ -550,6 +564,4 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
-
-
 
