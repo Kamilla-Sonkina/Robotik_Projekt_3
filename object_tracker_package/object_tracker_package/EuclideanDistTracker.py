@@ -2,7 +2,7 @@ import numpy as np
 import math
 from collections import deque
 import cv2
-from CenterOfMassCalculator import CenterOfMassCalculator  # Import der Klasse
+from .CenterOfMassCalculator import CenterOfMassCalculator  # Relativer Import der Klasse
 
 class EuclideanDistTracker:
     def __init__(self):
@@ -21,8 +21,8 @@ class EuclideanDistTracker:
         for rect in objects_rect:
             x, y, w, h, label = rect  
             
-            # Berechne den Masseschwerpunkt
-            center_of_mass = self.center_of_mass_calculator.max_inscribed_circle(frame, x, y, w, h)
+            # Berechne den Masseschwerpunkt und den Greifpunkt
+            center_of_mass = self.center_of_mass_calculator.calculate_center_of_mass(frame, x, y, w, h)
             if center_of_mass:
                 cx, cy = center_of_mass[0], center_of_mass[1]
             else:
@@ -64,12 +64,13 @@ class EuclideanDistTracker:
             if total_time > 0:
                 speed = (total_dist / total_time)  
                 self.__speeds[object_id] = speed
-                self.__all_speeds.append(speed)  # Speichert die Geschwindigkeit
+                if speed > 45:  # Offset ab dem Durchschnittliche Geschwindigkeit gespeichert wird 
+                    self.__all_speeds.append(speed)  # Speichert die Geschwindigkeit
                 return speed
         return 0
 
     def get_average_speed(self):
-        if len(self.__all_speeds) > 0:
+        if len(self.__all_speeds) > 10:  # Initialisierung über 10 Geschwindigkeiten
             average_speed = sum(self.__all_speeds) / len(self.__all_speeds)
             return average_speed
         return 0
