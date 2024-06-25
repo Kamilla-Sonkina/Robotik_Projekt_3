@@ -101,9 +101,11 @@ class PickedUp(CustomState):
 class Sorting(CustomState):
     def update_state(self):
         if ((abs(self.node.robot_pos['x'] - self.node.box_cat['x']) < self.node.controlling_tolerance and 
-             abs(self.node.robot_pos['y'] - self.node.box_cat['y']) < self.node.controlling_tolerance) or 
+             abs(self.node.robot_pos['y'] - self.node.box_cat['y']) < self.node.controlling_tolerance 
+             and self.node.oldest_object['class'] == 'cat') or 
             (abs(self.node.robot_pos['x'] - self.node.box_unicorn['x']) < self.node.controlling_tolerance and 
-             abs(self.node.robot_pos['y'] - self.node.box_unicorn['y']) < self.node.controlling_tolerance) and 
+             abs(self.node.robot_pos['y'] - self.node.box_unicorn['y']) < self.node.controlling_tolerance
+             and self.node.oldest_object['class'] == 'unicorn') and 
             self.node.gripper_is_activated):
             self.node.state_machine.transition_to('over_box')
             
@@ -323,8 +325,8 @@ class regelungs_node(Node):
 
     def object_data_callback(self, msg):
         self.user_target = False
-        self.object_data['x'] = msg.object_pos_x - self.zero_position['x']
-        self.object_data['y'] = msg.object_pos_y - self.zero_position['y']
+        self.object_data['x'] = ( - 0.000203 * msg.object_pos_x) + 0.378452
+        self.object_data['y'] = (msg.object_pos_y * 10e-5) + 0.01524
         self.object_data['class'] = msg.object_class
         self.object_data['timestamp'] = msg.timestamp_value
         self.object_data['index'] = msg.index_value
@@ -340,7 +342,7 @@ class regelungs_node(Node):
    
         
     def velocity_callback(self, msg):
-        self.velocity = (self.velocity * self.velo_zaehler + msg.data) / (self.velo_zaehler + 1)
+        self.velocity = round((self.velocity * self.velo_zaehler + (0.1 * msg.data)) / (self.velo_zaehler + 1), 2)
         self.velo_zaehler += 1
         self.get_logger().debug(f'input velocity is: {msg.data}')
         self.get_logger().debug(f'calculated velocity is: {self.velocity}')
