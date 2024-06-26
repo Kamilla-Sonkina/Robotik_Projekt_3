@@ -2,7 +2,7 @@ import numpy as np
 import math
 from collections import deque
 import cv2
-from .CenterOfMassCalculator import CenterOfMassCalculator  # Relativer Import der Klasse
+from .CenterOfMassCalculator import CenterOfMassCalculator  # Import der Klasse
 
 class EuclideanDistTracker:
     def __init__(self):
@@ -13,6 +13,7 @@ class EuclideanDistTracker:
         self.__speeds = {}  # Speichert Geschwindigkeiten zu jeweiliger ID
         self.__all_speeds = []  # Speichert alle jemals berechneten Geschwindigkeiten
         self.center_of_mass_calculator = CenterOfMassCalculator()  # Initialisierung des CenterOfMassCalculator
+        self.__center_data = {}  # Speichert die Daten der Schwerpunkte
 
     def update(self, objects_rect, frame, current_time): 
         objects_bbs_ids = []  # Liste mit den BBoxen und ID
@@ -21,10 +22,11 @@ class EuclideanDistTracker:
         for rect in objects_rect:
             x, y, w, h, label = rect  
             
-            # Berechne den Masseschwerpunkt und den Greifpunkt
+            # Berechne den Schwerpunkt
             center_of_mass = self.center_of_mass_calculator.calculate_center_of_mass(frame, x, y, w, h)
             if center_of_mass:
-                cx, cy = center_of_mass[0], center_of_mass[1]
+                cx, cy = center_of_mass
+                self.__center_data[self.__id_count] = (cx, cy)
             else:
                 cx, cy = x + w // 2, y + h // 2  # Fallback zum Mittelpunkt des Rechtecks
 
@@ -34,6 +36,7 @@ class EuclideanDistTracker:
 
                 if dist < 100:
                     self.__center_points[id] = (cx, cy)
+                    self.__center_data[id] = (cx, cy)
                     objects_bbs_ids.append([x, y, w, h, id])
                     same_object_detected = True
 
@@ -47,6 +50,7 @@ class EuclideanDistTracker:
 
             if not same_object_detected:
                 self.__center_points[self.__id_count] = (cx, cy)
+                self.__center_data[self.__id_count] = (cx, cy)
                 objects_bbs_ids.append([x, y, w, h, self.__id_count])
                 self.__positions[self.__id_count] = deque([(cx, cy, current_time)], maxlen=self.__speed_window_size)
                 self.__id_count += 1
@@ -64,16 +68,18 @@ class EuclideanDistTracker:
             if total_time > 0:
                 speed = (total_dist / total_time)  
                 self.__speeds[object_id] = speed
-                if speed > 45:  # Offset ab dem Durchschnittliche Geschwindigkeit gespeichert wird 
-                    self.__all_speeds.append(speed)  # Speichert die Geschwindigkeit
+                self.__all_speeds.append(speed)  # Speichert die Geschwindigkeit
                 return speed
         return 0
 
     def get_average_speed(self):
-        if len(self.__all_speeds) > 10:  # Initialisierung über 10 Geschwindigkeiten
+        if len(self.__all_speeds) > 0:
             average_speed = sum(self.__all_speeds) / len(self.__all_speeds)
             return average_speed
         return 0
 
     def get_object_center(self, object_id):
         return self.__center_points.get(object_id)
+
+    def get_center_data(self, object_id):
+        return self.__center_data.get(object_id)
