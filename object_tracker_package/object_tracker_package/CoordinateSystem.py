@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 class CoordinateSystem:
-    def __init__(self, top_down_transformer, marker_size=100, origin_x=20, origin_y=700):
+    def __init__(self, top_down_transformer, marker_size=100, origin_x=184, origin_y=454):
         self.top_down_transformer = top_down_transformer
         self.marker_size = marker_size
         self.coordinate_system_frame = None
