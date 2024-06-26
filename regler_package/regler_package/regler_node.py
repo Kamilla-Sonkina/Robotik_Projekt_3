@@ -210,6 +210,7 @@ class regelungs_node(Node):
         self.controll_u_z = 0
         self.callback_period = 5e90
         self.black_list_objects = []
+        self.velocity_in_coordinates = 0.0066
         self.get_logger().debug(f"state: {self.state_machine.current_state}")
         
 
@@ -342,9 +343,10 @@ class regelungs_node(Node):
    
         
     def velocity_callback(self, msg):
-        self.velocity = round((self.velocity * self.velo_zaehler + msg.data) / (self.velo_zaehler + 1), 2)
+        self.velocity = round((self.velocity * self.velo_zaehler + msg.data * self.velocity_in_coordinates) / (self.velo_zaehler + 1), 2)
         self.velo_zaehler += 1
-        self.get_logger().debug(f'input velocity is: {msg.data}')
+        self.get_logger().debug(f'raw input velocity is: {msg.data}')
+        self.get_logger().debug(f'transformed input velocity is: {msg.data*self.velocity_in_coordinates}')
         self.get_logger().debug(f'calculated velocity is: {self.velocity}')
 
     def calculate_target_position(self):
@@ -377,7 +379,7 @@ class regelungs_node(Node):
             
             elif((self.oldest_object['class'] == 'cat' or self.oldest_object['class'] == 'unicorn') 
                 and self.state_machine.current_state == self.state_machine.states['moving_to_object']):
-                self.target_position['x'] = (self.oldest_object['x'] - self.velocity * (time.time() - self.oldest_object['timestamp']) * 0.01) 
+                self.target_position['x'] = (self.oldest_object['x'] - self.velocity * (time.time() - self.oldest_object['timestamp'])) 
                 self.target_position['y'] = self.oldest_object['y'] 
                 self.target_position['z'] = self.ready_to_pick_up_z 
                 self.oldest_object['timestamp'] = time.time()
@@ -557,3 +559,4 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
+
