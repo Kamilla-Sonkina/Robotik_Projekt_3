@@ -4,7 +4,7 @@ import numpy as np
 class CenterOfMassCalculator:
     def calculate_center_of_mass(self, image, x, y, w, h):
         """
-        Berechnet den Schwerpunkt des erkannten Objekts in einem Bild und verschiebt ihn um 5 Pixel in die entgegengesetzte Richtung des geringsten Abstands zum Rand.
+        Berechnet den Schwerpunkt des erkannten Objekts in einem Bild und verschiebt ihn um 10 Pixel in die entgegengesetzte Richtung des geringsten Abstands zum Rand.
 
         Args:
             image (numpy.ndarray): Das gesamte Bild.
@@ -16,49 +16,63 @@ class CenterOfMassCalculator:
         Returns:
             tuple: Die (cx, cy) Koordinaten des verschobenen Schwerpunkts im gesamten Bild.
         """
+        # ROI ausschneiden
         object_roi = image[y:y+h, x:x+w]
         gray_roi = cv2.cvtColor(object_roi, cv2.COLOR_BGR2GRAY)
-        _, binary_roi = cv2.threshold(gray_roi, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
         
-        # Finden der Konturen der Objekte im binären Bild
-        contours, _ = cv2.findContours(binary_roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        # Falls keine Konturen gefunden wurden, gibt es keine Objekte
+        # Bild glätten, um Rauschen zu reduzieren
+        blurred_roi = cv2.GaussianBlur(gray_roi, (5, 5), 0)
+        
+        # Fester Schwellenwert
+        _, binary_roi = cv2.threshold(blurred_roi, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    
+        # Morphologische Operationen
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        cleaned = cv2.morphologyEx(binary_roi, cv2.MORPH_CLOSE, kernel, iterations=2)
+    
+        # Konturen finden
+        contours, _ = cv2.findContours(cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours) == 0:
             return None
-
-        # Finden des größten Objekts basierend auf der Konturfläche
-        largest_contour = max(contours, key=cv2.contourArea)
-
-        # Berechnung der Momente des größten Objekts
-        moments = cv2.moments(largest_contour)
-
-        # Berechnung des Schwerpunkts (Centroid) des größten Objekts
-        if moments['m00'] != 0:
-            centroid_x = int(moments['m10'] / moments['m00'])
-            centroid_y = int(moments['m01'] / moments['m00'])
-            
-            # Berechnung der Abstände vom Schwerpunkt zu den Rändern des Objekts
-            distances = []
-            for point in largest_contour:
-                px, py = point[0]
-                distance = np.sqrt((px - centroid_x)*2 + (py - centroid_y)*2)
-                distances.append((distance, (px, py)))
-            
-            # Finden des Punktes mit dem geringsten Abstand
-            min_distance, min_point = min(distances, key=lambda x: x[0])
-            px, py = min_point
-
-            # Richtung des geringsten Abstands bestimmen und den Schwerpunkt verschieben
-            dx = centroid_x - px
-            dy = centroid_y - py
-            distance = np.sqrt(dx*2 + dy*2)
-            if distance > 0:
-                shift_x = int((dx / distance) * 1)
-                shift_y = int((dy / distance) * 1)
-                centroid_x += shift_x
-                centroid_y += shift_y
-
-            return (centroid_x + x, centroid_y + y)
+        
+        # Momente berechnen
+        moments = cv2.moments(cleaned)
+        
+        # Schwerpunkt berechnen
+        if moments["m00"] != 0:
+            center_x = int(moments["m10"] / moments["m00"])
+            center_y = int(moments["m01"] / moments["m00"])
         else:
-            return None
+            center_x, center_y = 0, 0
+
+        # Berechnen des Schwerpunkts im gesamten Bild
+        global_center_x, global_center_y = int(center_x + x), int(center_y + y)
+
+        # Geringsten Abstand zum Rand des Objekts finden
+        min_distance = float('inf')
+        closest_point = None
+        for contour in contours:
+            for point in contour:
+                px, py = point[0]
+                distance = np.sqrt((center_x - px) ** 2 + (center_y - py) ** 2)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_point = (px, py)
+
+        if closest_point:
+            px, py = closest_point
+            # Richtung des geringsten Abstands bestimmen
+            dx = center_x - px
+            dy = center_y - py
+            distance = np.sqrt(dx ** 2 + dy ** 2)
+            if distance > 0:
+                # Verschieben des Schwerpunkts in die entgegengesetzte Richtung um 10 Pixel
+                shift_x = int((dx / distance) * 10)
+                shift_y = int((dy / distance) * 10)
+                shifted_center_x = center_x + shift_x
+                shifted_center_y = center_y + shift_y
+                # Berechnen des verschobenen Schwerpunkts im gesamten Bild
+                global_shifted_center_x, global_shifted_center_y = int(shifted_center_x + x), int(shifted_center_y + y)
+                return (global_shifted_center_x, global_shifted_center_y)
+        
+        return (global_center_x, global_center_y)
