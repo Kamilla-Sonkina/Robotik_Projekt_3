@@ -3,13 +3,17 @@ import numpy as np
 import tkinter as tk
 
 class TopDownTransformer:
-    def __init__(self, marker_size=200, num_frames_for_stability=20):
+        
+    def __init__(self, marker_size=200, num_frames_for_stability=30, crop_height_fraction=0.5, upper_crop_ratio=0.5, lower_crop_ratio=0.5):
         self.marker_size = marker_size
         self.num_frames_for_stability = num_frames_for_stability
         self.screen_width, self.screen_height = self.get_screen_resolution()
         self.stable_matrix = None
         self.matrices = []
         self.frame_count = 0
+        self.crop_height_fraction = crop_height_fraction  # Fraction of the height to keep in the center
+        self.upper_crop_ratio = upper_crop_ratio  # Proportion of the crop from the top
+        self.lower_crop_ratio = lower_crop_ratio  # Proportion of the crop from the bottom
 
     def get_screen_resolution(self):
         root = tk.Tk()
@@ -28,12 +32,23 @@ class TopDownTransformer:
             return frame
         
         top_down_image = cv2.warpPerspective(frame, self.stable_matrix, (self.screen_width, self.screen_height))
-        return top_down_image
+        
+        # Calculate crop boundaries based on new upper and lower crop ratios
+        total_crop_height = self.screen_height * (1 - self.crop_height_fraction)
+        upper_crop_height = int(total_crop_height * self.upper_crop_ratio)
+        lower_crop_height = int(total_crop_height * self.lower_crop_ratio)
+
+        y_start = upper_crop_height
+        y_end = self.screen_height - lower_crop_height
+        
+        cropped_image = top_down_image[y_start:y_end, :]
+        
+        return cropped_image
 
     def update_transformation_matrix(self, frame):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_250)
-        parameters = cv2.aruco.DetectorParameters_create()
+        aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
+        parameters = cv2.aruco.DetectorParameters()
         corners, ids, rejected = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
         if ids is not None:
