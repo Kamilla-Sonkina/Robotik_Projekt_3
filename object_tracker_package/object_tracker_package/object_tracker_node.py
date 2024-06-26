@@ -14,6 +14,9 @@ from .HelperFunctions import pixel_to_cm
 from .CoordinateSystem import CoordinateSystem
 from .CenterOfMassCalculator import CenterOfMassCalculator
 
+# Transformation toggle
+ENABLE_TRANSFORMATION = True
+
 class ObjectTrackingNode(Node):
     def __init__(self):
         super().__init__('object_tracking_node')
@@ -42,21 +45,25 @@ class ObjectTrackingNode(Node):
         self.coordinate_system = CoordinateSystem(self.transformer)
         self.center_of_mass_calculator = CenterOfMassCalculator()
 
+        #video_path = 1  # Use this if using a webcam
         video_path = "/home/joe/Downloads/video.mp4"
-        
-        # video_path = 1  # Use this if using a webcam
         self.cap = cv2.VideoCapture(video_path)
         if not self.cap.isOpened():
             self.get_logger().error(f"Fehler beim Öffnen der Videodatei: {video_path}")
             return
         self.frame_count = 0
         self.results_cache = []
+        self.published_ids = {}
 
         self.timer = self.create_timer(0.1, self.timer_callback)
         self.get_logger().info('Object Tracking Node started.')
 
         self.object_publisher = self.create_publisher(ObjectData, 'object_data', 10)
         self.velocity_publisher = self.create_publisher(Float64, 'velocity', 10)
+        self.current_time = 0
+        self.grasp_x = 0.0
+        self.grasp_y = 0.0
+        self.speed_cm = 0.0
 
     def timer_callback(self):
         if not self.cap.isOpened():
@@ -70,9 +77,14 @@ class ObjectTrackingNode(Node):
             self.cap.release()
             return
 
-        current_time = time.time()
+        self.current_time = time.time()
 
-        transformed_frame = self.transformer.get_transformed_frame(frame)
+        # Apply transformation if enabled
+        if ENABLE_TRANSFORMATION:
+            transformed_frame = self.transformer.get_transformed_frame(frame)
+        else:
+            transformed_frame = frame
+
         height, width = transformed_frame.shape[:2]
 
         if self.frame_count % 1 == 0:
@@ -86,10 +98,10 @@ class ObjectTrackingNode(Node):
                     x1, y1, x2, y2 = [int(coord * 2) for coord in result[:4]]
                     w = x2 - x1
                     h = y2 - y1
-                    label = 'Einhorn' if int(result[5]) == 1 else 'Katze'
+                    label = 'unicorn' if int(result[5]) == 1 else 'cat'
                     objects_rect.append((x1, y1, w, h, label))
             
-            tracked_objects = self.tracker.update(objects_rect, transformed_frame, current_time)
+            tracked_objects = self.tracker.update(objects_rect, transformed_frame, self.current_time)
             self.get_logger().info(f"Tracked objects: {tracked_objects}")
 
         for i, (x, y, w, h, id) in enumerate(tracked_objects):
@@ -102,18 +114,51 @@ class ObjectTrackingNode(Node):
             cv2.putText(transformed_frame, f'ID: {id} {label}', (x, y - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
             
             speed_px = self.tracker.get_speed(id)
-            speed_cm = pixel_to_cm(speed_px, self.coordinate_system.marker_size)
-            cv2.putText(transformed_frame, f'Speed: {speed_cm:.2f} cm/s', (x, y - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-            
+            self.speed_cm = pixel_to_cm(speed_px, self.coordinate_system.marker_size)
             grasp_point = self.center_of_mass_calculator.calculate_center_of_mass(transformed_frame, x, y, w, h)
+            
+            if self.frame_count % 2 == 0:
+                # Publish velocity
+                if self.grasp_x > 200:  # Check if the x value has crossed 300
+                    velocity_msg = Float64()
+                    velocity_msg.data = float(self.speed_cm)
+                    self.velocity_publisher.publish(velocity_msg)
+                    cv2.putText(transformed_frame, f'Speed: {self.speed_cm:.2f} ',(20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+                    
+                    if grasp_point:
+                        self.grasp_x, self.grasp_y = grasp_point
+                        object_data_msg = ObjectData()
+                        object_data_msg.index_value = int(id)
+                        object_data_msg.object_class = label
+                        object_data_msg.timestamp_value = int(self.current_time)
+                        object_data_msg.object_pos_x = float(self.grasp_x)
+                        object_data_msg.object_pos_y = float(self.grasp_y)
+                        self.object_publisher.publish(object_data_msg)
+                        self.get_logger().info(f"Published object data: {object_data_msg}")
+                        self.published_ids[id] = (self.grasp_x, self.grasp_y)
+                        grasp_point = self.published_ids.get(id, None)
+                        
+            #Display grasp point
+            #grasp_point = self.published_ids.get(id, None)
             if grasp_point:
-                grasp_x, grasp_y = grasp_point
-                cv2.circle(transformed_frame, (grasp_x, grasp_y), 5, (0, 0, 255), -1)
-                cv2.putText(transformed_frame, f'Grasp Point: ({grasp_x}, {grasp_y})', (grasp_x + 10, grasp_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+                self.grasp_x, self.grasp_y = grasp_point
+            else:
+                grasp_point = self.center_of_mass_calculator.calculate_center_of_mass(transformed_frame, x, y, w, h)
+                if grasp_point:
+                    self.grasp_x, self.grasp_y = grasp_point
+
+            if grasp_point:
+                grasp_x_cm = pixel_to_cm(self.grasp_x, self.coordinate_system.marker_size)
+                grasp_y_cm = pixel_to_cm(self.grasp_y, self.coordinate_system.marker_size)
+                
+                cv2.circle(transformed_frame, (int(self.grasp_x), int(self.grasp_y)), 5, (0, 0, 255), -1)
+                cv2.putText(transformed_frame, f'Grasp Point: ({self.grasp_x}, {self.grasp_y})', (int(self.grasp_x) , int(self.grasp_y)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1) #grasp_x_cm:.2f, grasp_y_cm:.2f
+
+            cv2.putText(transformed_frame, f'Speed: {self.speed_cm:.2f} cm/s', (x, y - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
 
         average_speed_px = self.tracker.get_average_speed()
         average_speed_cm = pixel_to_cm(average_speed_px, self.coordinate_system.marker_size)
-        cv2.putText(transformed_frame, f'Average Speed: {average_speed_cm:.2f} cm/s', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+        cv2.putText(transformed_frame, f'Average Speed: {average_speed_cm:.2f} cm/s',(10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
 
         transformed_frame = self.coordinate_system.draw_coordinate_system(transformed_frame)
 
@@ -133,4 +178,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
