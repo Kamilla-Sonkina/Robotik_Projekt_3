@@ -76,7 +76,7 @@ class ReadyToPickUp(CustomState):
     def update_state(self):
         if (abs(self.node.target_position['x'] - self.node.robot_pos['x']) < self.node.controlling_tolerance and 
             abs(self.node.target_position['y'] - self.node.robot_pos['y']) < self.node.controlling_tolerance and 
-            abs(self.node.pick_up_z - self.node.robot_pos['z']) <= (self.node.controlling_tolerance) and 
+            (self.node.pick_up_z - self.node.robot_pos['z']) <= (self.node.controlling_tolerance) and 
             self.node.gripper_is_activated and 
             not self.node.user_target):
             self.node.state_machine.transition_to('picked_up')
@@ -161,7 +161,7 @@ class regelungs_node(Node):
         self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None, 'sorted' : False}
         self.velocity = 0
         self.zero_position = {'x': None, 'y': None, 'z': None}
-        self.default_position = {'x': 0, 'y': 0, 'z': 0}
+        self.default_position = {'x': 0.15, 'y': 0.06, 'z': 0.06}
         self.gripper_is_activated = False
         self.target_position = {'x': None, 'y': None, 'z': None}
         
@@ -176,7 +176,7 @@ class regelungs_node(Node):
         self.kd_x = 0.49
         self.kp_y = 0.98
         self.kd_y = 0.49
-        self.kp_z = 2.5 #0.985199
+        self.kp_z = 0.9 #0.985199
         self.kd_z = 0.51
         self.n = 100
         self.first_arm_pos = 0
@@ -191,7 +191,7 @@ class regelungs_node(Node):
         
           
         
-        self.pick_up_z = 0.081  
+        self.pick_up_z = 0.079  
         self.ready_to_pick_up_z = 0.0714 
         self.transport_z= 0.055
         self.last_msg_time = time.time()
@@ -320,14 +320,16 @@ class regelungs_node(Node):
 
     def object_data_callback(self, msg):
         self.user_target = False
-        self.object_data['x'] = (-0.000203 * msg.object_pos_x) + 0.378452
-        self.object_data['y'] = (msg.object_pos_y * 10e-5) + 0.01524
+        self.object_data['x'] = (-0.00009823 * msg.object_pos_x)-(0.00009554*(1017-msg.object_pos_y)) + 0.27329 
+        self.object_data['y'] = (0.00000110 * msg.object_pos_x)-(0.00000725*(1017-msg.object_pos_y)) + 0.04866   
         self.object_data['class'] = msg.object_class
         self.object_data['timestamp'] = msg.timestamp_value
         self.object_data['index'] = msg.index_value
         if(self.object_data['index'] == self.oldest_object['index']):
+            self.get_logger().debug(f"updatet oldest object from x: {self.oldest_object['x']} timestamp: {self.oldest_object['timestamp']}")
             self.oldest_object['x'] = self.object_data['x']
             self.oldest_object['timestamp'] = self.object_data['timestamp']
+            self.get_logger().debug(f"updatet oldest object to x: {self.oldest_object['x']} timestamp: {self.oldest_object['timestamp']}")
 
         if (not any(obj['index'] == self.object_data['index'] for obj in self.queue) 
             and self.object_data['index'] not in self.black_list_objects
@@ -343,8 +345,11 @@ class regelungs_node(Node):
    
         
     def velocity_callback(self, msg):
-        self.velocity = round((self.velocity * self.velo_zaehler + msg.data * self.velocity_in_coordinates) / (self.velo_zaehler + 1), 2)
-        self.velo_zaehler += 1
+        if self.velo_zaehler == 5:
+            self.velocity = self.msg.data * self.velocity_in_coordinates
+        if self.velo_zaehler > 6:
+            self.velocity = (self.velocity * self.velo_zaehler + round((msg.data),3) * self.velocity_in_coordinates) / (self.velo_zaehler + 1)
+            self.velo_zaehler += 1
         self.get_logger().debug(f'raw input velocity is: {msg.data}')
         self.get_logger().debug(f'transformed input velocity is: {msg.data*self.velocity_in_coordinates}')
         self.get_logger().debug(f'calculated velocity is: {self.velocity}')
@@ -382,7 +387,7 @@ class regelungs_node(Node):
                 self.target_position['x'] = (self.oldest_object['x'] - self.velocity * (time.time() - self.oldest_object['timestamp'])) 
                 self.target_position['y'] = self.oldest_object['y'] 
                 self.target_position['z'] = self.ready_to_pick_up_z 
-                self.oldest_object['timestamp'] = time.time()
+                
                 self.get_logger().debug(f"object is at: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
         
         else: 
@@ -414,7 +419,7 @@ class regelungs_node(Node):
         
         elif(self.state_machine.current_state == self.state_machine.states['ready_to_pick_up']): 
             self.get_logger().debug(f'picking up')
-            
+            self.target_position['x'] = (self.oldest_object['x'] - self.velocity * (time.time() - self.oldest_object['timestamp'])) 
             self.target_position['z'] = self.pick_up_z
             self.gripper_is_activated = True
             self.sort(self.oldest_object)
@@ -527,7 +532,7 @@ class regelungs_node(Node):
                 self.oldest_object['index'] = popped_object.get('index', None)
                 self.oldest_object['sorted'] = False
                 
-                self.get_logger().debug('Popped object')
+                self.get_logger().debug(f"Popped object: {popped_object}")
                 self.state_machine.transition_to('moving_to_object')
                 self.calculate_target_position()
             else:
