@@ -25,6 +25,6 @@ if you want to debug regler_node and see extended information of the code run th
 `ros2 run regler_package regler_node --ros-args --log-level debug`
 
 for the object tracker node connect the camera and run the command
-`
+
 ros2 run object_tracker_package object_tracker_node`
-find . -name "CMakeCache.txt" -type f -delete
+
