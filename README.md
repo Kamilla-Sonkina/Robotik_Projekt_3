@@ -26,5 +26,5 @@ if you want to debug regler_node and see extended information of the code run th
 
 for the object tracker node connect the camera and run the command
 
-ros2 run object_tracker_package object_tracker_node`
+`ros2 run object_tracker_package object_tracker_node`
 
