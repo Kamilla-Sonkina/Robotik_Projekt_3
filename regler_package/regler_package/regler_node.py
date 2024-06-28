@@ -211,6 +211,9 @@ class regelungs_node(Node):
         self.callback_period = 5e90
         self.black_list_objects = []
         self.velocity_in_coordinates = 0.0066
+        self.last_derivative_x = 0
+        self.last_derivative_y = 0
+        self.last_derivative_z = 0
         self.get_logger().debug(f"state: {self.state_machine.current_state}")
         
 
@@ -510,8 +513,8 @@ class regelungs_node(Node):
         
         return control_signal
 
-    """
-    def regler(self):
+    
+    """def regler(self):
         self.get_logger().debug(f'target position is: {self.target_position}', throttle_duration_sec=1)
         self.get_logger().debug('Start controlling')
         
@@ -553,8 +556,8 @@ class regelungs_node(Node):
         control_signal = kp * error + kd * filtered_derivative
         control_signal = float(control_signal)
         
-        return control_signal, filtered_derivative 
-        """   
+        return control_signal, filtered_derivative """
+         
     
     def enqueue(self, object_data):
         self.queue.append(object_data)
@@ -608,4 +611,3 @@ def main(args=None):
                 
 if __name__ == '__main__':
     main()
-
