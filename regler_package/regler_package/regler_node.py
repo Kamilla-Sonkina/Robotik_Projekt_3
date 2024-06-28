@@ -548,15 +548,18 @@ class regelungs_node(Node):
         self.get_logger().debug('published robot_cmd')
         self.update_state()
 
-    def compute_pd(self, error, last_error, last_derivative, dt, kp, kd):
+        def compute_pd(self, error, last_error, dt, kp, kd, last_derivative):
+    
         derivative = (error - last_error) / dt
-        
-        filtered_derivative = self.n * derivative + (1 - self.n) * last_derivative
-        
+    
+  
+        Td = 0.1  # Adjust Td as needed
+        filtered_derivative = (1/(Td**2 + 2*Td*dt + dt**2)) * (derivative + 2*Td*last_derivative)
+    
         control_signal = kp * error + kd * filtered_derivative
         control_signal = float(control_signal)
-        
-        return control_signal, filtered_derivative """
+    
+        return control_signal, filtered_derivative
          
     
     def enqueue(self, object_data):
