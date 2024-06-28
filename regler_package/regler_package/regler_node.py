@@ -548,7 +548,7 @@ class regelungs_node(Node):
     def compute_pd(self, error, last_error, last_derivative, dt, kp, kd):
         derivative = (error - last_error) / dt
         
-        filtered_derivative = self.alpha * derivative + (1 - self.alpha) * last_derivative
+        filtered_derivative = self.n * derivative + (1 - self.n) * last_derivative
         
         control_signal = kp * error + kd * filtered_derivative
         control_signal = float(control_signal)
