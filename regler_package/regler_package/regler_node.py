@@ -3,7 +3,7 @@ from rclpy.node import Node
 from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
 from target_pose_interfaces.msg import TargetPose
 from object_interfaces.msg import ObjectData
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, String
 import time
 from builtin_interfaces.msg import Time
 
@@ -56,9 +56,9 @@ class Idle(CustomState):
             and self.node.target_position['y'] == self.node.default_position['y']
             and self.node.target_position['z'] == self.node.default_position['z']):
             self.node.state_machine.transition_to('default')
-        if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
+        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
             self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds') 
+            self.node.emergency_case('No position callbacks in the last 5 seconds') """
 
 class MovingToObject(CustomState):
     def update_state(self):
@@ -68,10 +68,9 @@ class MovingToObject(CustomState):
              self.node.robot_pos['z'] < (self.node.pick_up_z + self.node.controlling_tolerance)) and 
             not self.node.user_target):
             self.node.state_machine.transition_to('ready_to_pick_up')
-        if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
+        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
             self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds')    
-
+            self.node.emergency_case('No position callbacks in the last 5 seconds') """
 class ReadyToPickUp(CustomState):
     def update_state(self):
         if (abs(self.node.target_position['x'] - self.node.robot_pos['x']) < self.node.controlling_tolerance and 
@@ -81,9 +80,9 @@ class ReadyToPickUp(CustomState):
             not self.node.user_target):
             self.node.state_machine.transition_to('picked_up')
             self.node.target_position['z'] = self.node.transport_z
-        if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
+        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
             self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds') 
+            self.node.emergency_case('No position callbacks in the last 5 seconds') """
 
 class PickedUp(CustomState):
     def update_state(self):
@@ -93,9 +92,9 @@ class PickedUp(CustomState):
             self.node.gripper_is_activated and 
             not self.node.user_target):
             self.node.state_machine.transition_to('sorting')
-        if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
+        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
             self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds')
+            self.node.emergency_case('No position callbacks in the last 5 seconds') """
 
 
 class Sorting(CustomState):
@@ -109,19 +108,18 @@ class Sorting(CustomState):
             self.node.gripper_is_activated):
             self.node.state_machine.transition_to('over_box')
             
-        if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
+        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
             self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds')
+            self.node.emergency_case('No position callbacks in the last 5 seconds') """
 
 class OverBox(CustomState):
     def update_state(self):
         if self.node.gripper_is_activated == False:
             self.node.state_machine.transition_to('idle')
         
-        if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
+        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
             self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds')
-
+            self.node.emergency_case('No position callbacks in the last 5 seconds') """
 
 class Default(CustomState):
     def update_state(self):
@@ -131,9 +129,9 @@ class Default(CustomState):
              ((not self.node.gripper_is_activated and self.node.oldest_object['sorted'] == False) or self.node.user_target)):
             self.node.state_machine.transition_to('moving_to_object')
         
-        if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
+        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
             self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds')
+            self.node.emergency_case('No position callbacks in the last 5 seconds') """
 
 class Emergency(CustomState):
     def update_state(self):
@@ -152,6 +150,7 @@ class regelungs_node(Node):
         self.target_pos_sub = self.create_subscription(TargetPose, 'target_position', self.target_position_callback, 10)
         self.vel_sub = self.create_subscription(Float64, 'velocity', self.velocity_callback, 10)
         self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_position', self.arm_position_callback, 5)
+        self.emergency_sub = self.create_subscription(String, 'emergency', self.emergency_callback, 5)
         self.timer_period = 5.0 
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
 
@@ -277,7 +276,8 @@ class regelungs_node(Node):
         
         
 
-        
+    def emergency_callback(self, msg):
+        self.emergency_case(msg.data)
 
     def target_position_callback(self, msg):
         self.user_target = True
@@ -548,18 +548,15 @@ class regelungs_node(Node):
         self.get_logger().debug('published robot_cmd')
         self.update_state()
 
-        def compute_pd(self, error, last_error, dt, kp, kd, last_derivative):
-    
+    def compute_pd(self, error, last_error, last_derivative, dt, kp, kd):
         derivative = (error - last_error) / dt
-    
-  
-        Td = 0.1  # Adjust Td as needed
-        filtered_derivative = (1/(Td**2 + 2*Td*dt + dt**2)) * (derivative + 2*Td*last_derivative)
-    
+        
+        filtered_derivative = self.n * derivative + (1 - self.n) * last_derivative
+        
         control_signal = kp * error + kd * filtered_derivative
         control_signal = float(control_signal)
-    
-        return control_signal, filtered_derivative
+        
+        return control_signal, filtered_derivative """
          
     
     def enqueue(self, object_data):
