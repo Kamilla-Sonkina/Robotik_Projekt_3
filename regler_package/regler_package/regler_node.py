@@ -195,6 +195,7 @@ class regelungs_node(Node):
         self.transport_z= 0.055
         self.last_msg_time = time.time()
         self.move_to_zero_position()
+        self.get_logger().info('25 seconds until ready')
         time.sleep(5)
         self.get_logger().info('20 seconds until ready')
         time.sleep(5)
@@ -203,6 +204,7 @@ class regelungs_node(Node):
         self.get_logger().info('10 seconds until ready')
         time.sleep(5)
         self.get_logger().info('5 seconds until ready')
+        time.sleep(5)
         self.opposit_corner = {'x': 0.2, 'y': 0.1, 'z': self.pick_up_z}
         self.controlling_tolerance = 0.005
         self.current_time = 1
