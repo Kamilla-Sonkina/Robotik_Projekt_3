@@ -56,9 +56,7 @@ class Idle(CustomState):
             and self.node.target_position['y'] == self.node.default_position['y']
             and self.node.target_position['z'] == self.node.default_position['z']):
             self.node.state_machine.transition_to('default')
-        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
-            self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds') """
+       
 
 class MovingToObject(CustomState):
     def update_state(self):
@@ -68,9 +66,7 @@ class MovingToObject(CustomState):
              self.node.robot_pos['z'] < (self.node.pick_up_z + self.node.controlling_tolerance)) and 
             not self.node.user_target):
             self.node.state_machine.transition_to('ready_to_pick_up')
-        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
-            self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds') """
+
 class ReadyToPickUp(CustomState):
     def update_state(self):
         if (abs(self.node.target_position['x'] - self.node.robot_pos['x']) < self.node.controlling_tolerance and 
@@ -80,10 +76,7 @@ class ReadyToPickUp(CustomState):
             not self.node.user_target):
             self.node.state_machine.transition_to('picked_up')
             self.node.target_position['z'] = self.node.transport_z
-        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
-            self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds') """
-
+        
 class PickedUp(CustomState):
     def update_state(self):
         if (abs(self.node.target_position['x'] - self.node.robot_pos['x']) < self.node.controlling_tolerance and 
@@ -92,10 +85,7 @@ class PickedUp(CustomState):
             self.node.gripper_is_activated and 
             not self.node.user_target):
             self.node.state_machine.transition_to('sorting')
-        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
-            self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds') """
-
+        
 
 class Sorting(CustomState):
     def update_state(self):
@@ -108,19 +98,13 @@ class Sorting(CustomState):
             self.node.gripper_is_activated):
             self.node.state_machine.transition_to('over_box')
             
-        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
-            self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds') """
-
+        
 class OverBox(CustomState):
     def update_state(self):
         if self.node.gripper_is_activated == False:
             self.node.state_machine.transition_to('idle')
         
-        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
-            self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds') """
-
+      
 class Default(CustomState):
     def update_state(self):
         if ((abs(self.node.target_position['x'] - self.node.robot_pos['x']) >= self.node.controlling_tolerance or 
@@ -129,10 +113,7 @@ class Default(CustomState):
              ((not self.node.gripper_is_activated and self.node.oldest_object['sorted'] == False) or self.node.user_target)):
             self.node.state_machine.transition_to('moving_to_object')
         
-        """if (time.time_ns() - self.node.last_calculation_time) > self.node.callback_period:
-            self.node.state_machine.transition_to('emergency')
-            self.node.emergency_case('No position callbacks in the last 5 seconds') """
-
+        
 class Emergency(CustomState):
     def update_state(self):
         if abs(self.node.robot_pos['x']) < self.node.controlling_tolerance:
@@ -273,20 +254,15 @@ class regelungs_node(Node):
         self.controll_u_y = robot_cmd.accel_y
         self.controll_u_z = robot_cmd.accel_z
         robot_cmd.activate_gripper = self.gripper_is_activated
-        self.robot_command_pub.publish(robot_cmd)
-        
-
-        
-    def timer_callback(self):
-        if((time.time_ns()- self.last_calculation_time) > self.callback_period
-        and self.state_machine.current_state != self.state_machine.states['initializing']):
-            self.emergency_case('no position callbacks in the last 5 seconds')   
-        
+        self.robot_command_pub.publish(robot_cmd)    
         
         
 
     def emergency_callback(self, msg):
+        self.get_logger().debug(f"emergency recieved because of {msg.data}")
         self.emergency_case(msg.data)
+        
+        
 
     def target_position_callback(self, msg):
         self.user_target = True
