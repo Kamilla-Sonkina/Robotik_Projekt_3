@@ -19,8 +19,9 @@ class watchdog(Node):
         self.last_u_y = 0
         self.last_u_z = 0
         self.callback_period = 5
-        self.last_time = time.time()
+        self.last_time = 0
         self.current_time = time.time()
+        self.regler_node_ready = False
         self.robot_command_sub = self.create_subscription(RobotCmd, 'robot_command', self.command_callback, 10)
         self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_position', self.arm_position_callback, 5)
         self.timer = self.create_timer(1.0, self.timer_callback)
@@ -38,6 +39,7 @@ class watchdog(Node):
         
 
     def command_callback(self, msg):
+        self.regler_node_ready = True
         self.last_u_x = self.u_x
         self.last_u_y = self.u_y
         self.last_u_z = self.u_z
@@ -51,9 +53,10 @@ class watchdog(Node):
 
     def check_time(self):
         self.current_time = time.time()
-        if self.current_time - self.last_time > self.callback_period:
-            self.publish_emergency('no position callbacks in the last 5 seconds')
-        else: self.get_logger().debug('all good')
+        if self.regler_node_ready:
+            if self.current_time - self.last_time > self.callback_period:
+                self.publish_emergency(f'no position callbacks in the last {self.callback_period} seconds')
+            else: self.get_logger().debug('all good')
 
 
     def check_positions_difference(self):
