@@ -132,9 +132,7 @@ class regelungs_node(Node):
         self.vel_sub = self.create_subscription(Float64, 'velocity', self.velocity_callback, 10)
         self.arm_positions_sub = self.create_subscription(RobotPos, 'robot_position', self.arm_position_callback, 5)
         self.emergency_sub = self.create_subscription(String, 'emergency', self.emergency_callback, 5)
-        self.timer_period = 5.0 
-        self.timer = self.create_timer(self.timer_period, self.timer_callback)
-
+       
         self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_command', 10)
         self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
        
