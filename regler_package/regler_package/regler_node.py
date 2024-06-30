@@ -3,7 +3,7 @@ from rclpy.node import Node
 from ro45_portalrobot_interfaces.msg import RobotPos, RobotCmd
 from target_pose_interfaces.msg import TargetPose
 from object_interfaces.msg import ObjectData
-from std_msgs.msg import Float64, String
+from std_msgs.msg import Float64, String, Bool
 import time
 from builtin_interfaces.msg import Time
 
@@ -134,10 +134,11 @@ class regelungs_node(Node):
         self.emergency_sub = self.create_subscription(String, 'emergency', self.emergency_callback, 5)
        
         self.robot_command_pub = self.create_publisher(RobotCmd, 'robot_command', 10)
+        self.init_pub = self.create_publisher(Bool, 'init_bool', 10)
         self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
        
         self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None, 'sorted' : False}
-        self.velocity = 0
+        self.velocity = 0.0
         self.zero_position = {'x': None, 'y': None, 'z': None}
         self.default_position = {'x': 0.15, 'y': 0.06, 'z': 0.06}
         self.gripper_is_activated = False
@@ -160,7 +161,7 @@ class regelungs_node(Node):
         self.first_arm_pos = 0
         
         self.user_target = False
-        self.velo_zaehler = 0
+        self.velo_zaehler = -5
 
         self.queue = []
 
@@ -173,7 +174,7 @@ class regelungs_node(Node):
         self.ready_to_pick_up_z = 0.0714 
         self.transport_z= 0.055
         self.last_msg_time = time.time()
-        self.move_to_zero_position()
+        """self.move_to_zero_position()
         self.get_logger().info('25 seconds until ready')
         time.sleep(5)
         self.get_logger().info('20 seconds until ready')
@@ -183,7 +184,7 @@ class regelungs_node(Node):
         self.get_logger().info('10 seconds until ready')
         time.sleep(5)
         self.get_logger().info('5 seconds until ready')
-        time.sleep(5)
+        time.sleep(5)"""
         self.opposit_corner = {'x': 0.2, 'y': 0.1, 'z': self.pick_up_z}
         self.controlling_tolerance = 0.005
         self.current_time = 1
@@ -198,9 +199,10 @@ class regelungs_node(Node):
         self.callback_period = 5e90
         self.black_list_objects = []
         self.velocity_in_coordinates = 0.0066
-        self.last_derivative_x = 0
-        self.last_derivative_y = 0
-        self.last_derivative_z = 0
+        self.last_derivative_x = 50
+        self.last_derivative_y = 50
+        self.last_derivative_z = 50
+        
         self.get_logger().debug(f"state: {self.state_machine.current_state}")
         
 
@@ -291,6 +293,7 @@ class regelungs_node(Node):
             self.get_logger().debug(f"zero position is: x={self.zero_position['x']}, y={self.zero_position['y']}, z={self.zero_position['z']}")
             self.state_machine.transition_to('idle')
             self.get_logger().info('initializing finished')
+            self.init_pub.publish(Bool(data=True))
             return
         
         else:
@@ -311,6 +314,9 @@ class regelungs_node(Node):
         self.object_data['class'] = msg.object_class
         self.object_data['timestamp'] = msg.timestamp_value
         self.object_data['index'] = msg.index_value
+        for item in self.queue:
+            if abs(self.object_data['x'] - item['x']) < 0.33:
+                return
         if(self.object_data['index'] == self.oldest_object['index']):
             self.get_logger().debug(f"updatet oldest object from x: {self.oldest_object['x']} timestamp: {self.oldest_object['timestamp']}")
             self.oldest_object['x'] = self.object_data['x']
@@ -331,15 +337,16 @@ class regelungs_node(Node):
    
         
     def velocity_callback(self, msg):
-        if self.velo_zaehler == 5:
-            self.velocity = self.msg.data * self.velocity_in_coordinates
-        if self.velo_zaehler > 6:
-            self.velocity = (self.velocity * self.velo_zaehler + round((msg.data),3) * self.velocity_in_coordinates) / (self.velo_zaehler + 1)
-            self.velo_zaehler += 1
-        self.get_logger().debug(f'raw input velocity is: {msg.data}')
-        self.get_logger().debug(f'transformed input velocity is: {msg.data*self.velocity_in_coordinates}')
-        self.get_logger().debug(f'calculated velocity is: {self.velocity}')
-
+        if self.velo_zaehler == 0:
+            self.velocity = msg.data * self.velocity_in_coordinates
+        if self.velo_zaehler > 1:
+            self.velocity = (self.velocity * self.velo_zaehler + msg.data * self.velocity_in_coordinates) / (self.velo_zaehler + 1)
+            self.get_logger().debug(f'velo counter is:: {self.velo_zaehler}')
+            self.get_logger().debug(f'raw input velocity is: {msg.data}')
+            self.get_logger().debug(f'transformed input velocity is: {msg.data*self.velocity_in_coordinates}')
+            self.get_logger().debug(f'calculated velocity is: {self.velocity}')
+        self.velo_zaehler += 1
+        
     def calculate_target_position(self):
         
         if(self.state_machine.current_state == self.state_machine.states['over_box']):
@@ -373,7 +380,8 @@ class regelungs_node(Node):
                 self.target_position['x'] = (self.oldest_object['x'] - self.velocity * (time.time() - self.oldest_object['timestamp'])) 
                 self.target_position['y'] = self.oldest_object['y'] 
                 self.target_position['z'] = self.ready_to_pick_up_z 
-                
+                if(self.target_position['x'] < 0):
+                    self.dequeue()
                 self.get_logger().debug(f"object is at: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
         
         else: 
