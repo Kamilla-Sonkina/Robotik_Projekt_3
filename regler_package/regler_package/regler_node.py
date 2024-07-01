@@ -158,6 +158,25 @@ class regelungs_node(Node):
         self.kp_z = 0.9 #0.985199
         self.kd_z = 0.51
         self.n = 100
+        """
+        self.kp_x = 9.9
+        self.kd_x = 5.5
+        self.kp_y = 9.9
+        self.kd_y = 5.5
+        self.kp_z = 9.9
+        self.kd_z = 5.5
+        self.N = 20
+
+        self.pt2_state_x = [0, 0]
+        self.pt2_state_y = [0, 0]
+        self.pt2_state_z = [0, 0]
+
+        self.last_error_x = 0
+        self.last_derivative_x = 0
+        self.last_error_y = 0
+        self.last_derivative_y = 0
+        self.last_error_z = 0
+        self.last_derivative_z = 0"""
         self.first_arm_pos = 0
         
         self.user_target = False
@@ -503,9 +522,9 @@ class regelungs_node(Node):
         
         
         return control_signal
+        """
 
-    
-    """def regler(self):
+    def regler(self):
         self.get_logger().debug(f'target position is: {self.target_position}', throttle_duration_sec=1)
         self.get_logger().debug('Start controlling')
         
@@ -515,40 +534,81 @@ class regelungs_node(Node):
         
         dt = (self.current_time - self.last_calculation_time)
         
-        u_x, self.last_derivative_x = self.compute_pd(differenz_x, self.last_error_x, self.last_derivative_x, dt, self.kp_x, self.kd_x)
+        # nur pd regler
+        u_x, self.last_derivative_x = self.compute_pd(differenz_x, self.last_error_x, self.last_derivative_x, dt, self.kp_x, self.kd_x, self.N)
         self.last_error_x = differenz_x
-        self.controll_u_x = u_x
-        self.get_logger().debug(f"differenz x:{differenz_x}, u_x: {u_x}, last error {self.last_error_x}, kd: {self.kd_x}, kp: {self.kp_x}, robot x:{self.robot_pos['x']},")
         
-        u_y, self.last_derivative_y = self.compute_pd(differenz_y, self.last_error_y, self.last_derivative_y, dt, self.kp_y, self.kd_y)
+        u_y, self.last_derivative_y = self.compute_pd(differenz_y, self.last_error_y, self.last_derivative_y, dt, self.kp_y, self.kd_y, self.N)
         self.last_error_y = differenz_y
-        self.controll_u_y = u_y 
-        self.get_logger().debug(f"differenz y:{differenz_y}, u_y: {u_y}, last error {self.last_error_y}, kd: {self.kd_y}, kp: {self.kp_y}, robot y:{self.robot_pos['y']},")
         
-        u_z, self.last_derivative_z = self.compute_pd(differenz_z, self.last_error_z, self.last_derivative_z, dt, self.kp_z, self.kd_z)
+        u_z, self.last_derivative_z = self.compute_pd(differenz_z, self.last_error_z, self.last_derivative_z, dt, self.kp_z, self.kd_z, self.N)
         self.last_error_z = differenz_z
-        self.controll_u_z = u_z
-        self.get_logger().debug(f"differenz z:{differenz_z}, u_z: {u_z}, last error {self.last_error_z}, kd: {self.kd_z}, kp: {self.kp_z}, robot z:{self.robot_pos['z']},")
-     
+        
+        # PT2 filter 
+        u_x_filtered = self.apply_pt2_filter(u_x, dt, 'x')
+        u_y_filtered = self.apply_pt2_filter(u_y, dt, 'y')
+        u_z_filtered = self.apply_pt2_filter(u_z, dt, 'z')
+        
+        self.controll_u_x = u_x_filtered
+        self.controll_u_y = u_y_filtered
+        self.controll_u_z = u_z_filtered
+        
+        self.get_logger().debug(f"differenz x:{differenz_x}, u_x: {u_x_filtered}, last error {self.last_error_x}, kd: {self.kd_x}, kp: {self.kp_x}, robot x:{self.robot_pos['x']},")
+        self.get_logger().debug(f"differenz y:{differenz_y}, u_y: {u_y_filtered}, last error {self.last_error_y}, kd: {self.kd_y}, kp: {self.kp_y}, robot y:{self.robot_pos['y']},")
+        self.get_logger().debug(f"differenz z:{differenz_z}, u_z: {u_z_filtered}, last error {self.last_error_z}, kd: {self.kd_z}, kp: {self.kp_z}, robot z:{self.robot_pos['z']},")
+        
         robot_cmd = RobotCmd()
-        robot_cmd.accel_x = u_x
-        robot_cmd.accel_y = u_y
-        robot_cmd.accel_z = u_z
+        robot_cmd.accel_x = u_x_filtered
+        robot_cmd.accel_y = u_y_filtered
+        robot_cmd.accel_z = u_z_filtered
         robot_cmd.activate_gripper = self.gripper_is_activated
         self.robot_command_pub.publish(robot_cmd)
         self.get_logger().debug('published robot_cmd')
         self.update_state()
 
-    def compute_pd(self, error, last_error, last_derivative, dt, kp, kd):
+    def compute_pd(self, error, last_error, last_derivative, dt, kp, kd, N):
         derivative = (error - last_error) / dt
         
-        filtered_derivative = self.n * derivative + (1 - self.n) * last_derivative
+        # D-Anteil mit tief-pass
+        Tf = 1 / N
+        alpha = Tf / (Tf + dt)
+        filtered_derivative = alpha * derivative + (1 - alpha) * last_derivative
         
         control_signal = kp * error + kd * filtered_derivative
         control_signal = float(control_signal)
         
-        return control_signal, filtered_derivative """
-         
+        return control_signal, filtered_derivative
+        
+    def apply_pt2_filter(self, control_signal, dt, axis):
+        if axis == 'x':
+            last_state = self.pt2_state_x
+        elif axis == 'y':
+            last_state = self.pt2_state_y
+        elif axis == 'z':
+            last_state = self.pt2_state_z
+    
+        # PT2 filter Werte
+        a0 = 0.00125
+        a1 = 0.05
+        a2 = 1
+        num = 1
+        
+        # implementierung ?
+        y = (num * control_signal - a1 * last_state[0] - a0 * last_state[1]) / a2
+        
+    
+        last_state[1] = last_state[0]
+        last_state[0] = y
+        
+        if axis == 'x':
+            self.pt2_state_x = last_state
+        elif axis == 'y':
+            self.pt2_state_y = last_state
+        elif axis == 'z':
+            self.pt2_state_z = last_state
+        
+        return y
+"""
     
     def enqueue(self, object_data):
         self.queue.append(object_data)
