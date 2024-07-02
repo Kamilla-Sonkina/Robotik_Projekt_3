@@ -218,9 +218,7 @@ class regelungs_node(Node):
         self.callback_period = 5e90
         self.black_list_objects = []
         self.velocity_in_coordinates = 0.0066
-        self.last_derivative_x = 
-        self.last_derivative_y = 
-        self.last_derivative_z = 
+    
         
         self.get_logger().debug(f"state: {self.state_machine.current_state}")
         
@@ -478,10 +476,14 @@ class regelungs_node(Node):
         self.get_logger().debug(f'target position is: {self.target_position}', throttle_duration_sec = 1)
         self.get_logger().debug('Start controlling')
         
-       
-        differenz_x = self.target_position['x'] - self.robot_pos['x']    
-        differenz_y = self.target_position['y'] - self.robot_pos['y']  
-        differenz_z = self.target_position['z'] - self.robot_pos['z']   
+        robot_pos_x_filtered = self.apply_pt2_filter(self.robot_pos['x'], dt, 'x')
+        robot_pos_y_filtered = self.apply_pt2_filter(self.robot_pos['y'], dt, 'y')
+        robot_pos_z_filtered = self.apply_pt2_filter(self.robot_pos['z'], dt, 'z')
+        
+        differenz_x = self.target_position['x'] - self.robot_pos_filtered   
+        differenz_y = self.target_position['y'] - self.robot_pos_filtered 
+        differenz_z = self.target_position['z'] - self.robot_pos_filtered
+        
         
         dt = (self.current_time - self.last_calculation_time) 
       
