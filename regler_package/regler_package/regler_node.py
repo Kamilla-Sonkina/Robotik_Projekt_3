@@ -218,9 +218,9 @@ class regelungs_node(Node):
         self.callback_period = 5e90
         self.black_list_objects = []
         self.velocity_in_coordinates = 0.0066
-        self.last_derivative_x = 50
-        self.last_derivative_y = 50
-        self.last_derivative_z = 50
+        self.last_derivative_x = 
+        self.last_derivative_y = 
+        self.last_derivative_z = 
         
         self.get_logger().debug(f"state: {self.state_machine.current_state}")
         
