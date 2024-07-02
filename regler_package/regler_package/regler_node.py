@@ -153,13 +153,13 @@ class regelungs_node(Node):
         self.last_error_z = 0
         #self.kp = 9.85199 
         #self.kd_x = 6.447857
-        self.kp_x = 0.87
-        self.kd_x = 0.60
-        self.kp_y = 0.87
-        self.kd_y = 0.60
-        self.kp_z = 0.65
-        self.kd_z = 0.4
-        self.N = 30
+        self.kp_x = 0.76#0.87
+        self.kd_x = 0.62#0.60
+        self.kp_y = 0.81#0.87
+        self.kd_y = 0.67#0.60
+        self.kp_z = 0.65#0.65
+        self.kd_z = 0.4#0.4
+        self.N = 21#30
         self.pt2_state_x = [0, 0]
         self.pt2_state_y = [0, 0]
         self.pt2_state_z = [0, 0]
@@ -319,8 +319,8 @@ class regelungs_node(Node):
 
     def object_data_callback(self, msg):
         self.user_target = False
-        self.object_data['x'] = (-0.00018494 * msg.object_pos_x)-0*(0.00009554*(1017-msg.object_pos_y)) + 0.339715 
-        self.object_data['y'] = (0.00000110 * msg.object_pos_x)-(0.00000725*(1017-msg.object_pos_y)) + 0.04866   
+        self.object_data['x'] = (-0.000174 * msg.object_pos_x) + 0.179 
+        self.object_data['y'] = -0.000223*msg.object_pos_y + 0.09  
         self.object_data['class'] = msg.object_class
         self.object_data['timestamp'] = msg.timestamp_value
         self.object_data['index'] = msg.index_value
@@ -387,7 +387,7 @@ class regelungs_node(Node):
             
             elif((self.oldest_object['class'] == 'cat' or self.oldest_object['class'] == 'unicorn') 
                 and self.state_machine.current_state == self.state_machine.states['moving_to_object']):
-                self.target_position['x'] = (self.oldest_object['x'] - self.velocity * (time.time() - self.oldest_object['timestamp'] + 0.1)) 
+                self.target_position['x'] = (self.oldest_object['x'] - self.velocity * (time.time() - self.oldest_object['timestamp'] )) 
                 self.target_position['y'] = self.oldest_object['y'] 
                 self.target_position['z'] = self.ready_to_pick_up_z 
                 if(self.target_position['x'] < 0):
