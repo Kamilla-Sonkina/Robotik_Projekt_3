@@ -530,9 +530,13 @@ class regelungs_node(Node):
         self.get_logger().debug(f'target position is: {self.target_position}', throttle_duration_sec=1)
         self.get_logger().debug('Start controlling')
         
-        differenz_x = self.target_position['x'] - self.robot_pos['x']    
-        differenz_y = self.target_position['y'] - self.robot_pos['y']  
-        differenz_z = self.target_position['z'] - self.robot_pos['z']   
+        robot_pos_x_filtered = self.apply_pt2_filter(self.robot_pos['x'], dt, 'x')
+        robot_pos_y_filtered = self.apply_pt2_filter(self.robot_pos['y'], dt, 'y')
+        robot_pos_z_filtered = self.apply_pt2_filter(self.robot_pos['z'], dt, 'z')
+        
+        differenz_x = self.target_position['x'] - self.robot_pos_filtered   
+        differenz_y = self.target_position['y'] - self.robot_pos_filtered 
+        differenz_z = self.target_position['z'] - self.robot_pos_filtered  
         
         dt = (self.current_time - self.last_calculation_time)
         
@@ -547,22 +551,20 @@ class regelungs_node(Node):
         self.last_error_z = differenz_z
         
         # PT2 filter 
-        u_x_filtered = self.apply_pt2_filter(u_x, dt, 'x')
-        u_y_filtered = self.apply_pt2_filter(u_y, dt, 'y')
-        u_z_filtered = self.apply_pt2_filter(u_z, dt, 'z')
         
-        self.controll_u_x = u_x_filtered
-        self.controll_u_y = u_y_filtered
-        self.controll_u_z = u_z_filtered
+        
+        self.controll_u_x = u_x
+        self.controll_u_y = u_y
+        self.controll_u_z = u_z
         
         self.get_logger().debug(f"differenz x:{differenz_x}, u_x: {u_x_filtered}, last error {self.last_error_x}, kd: {self.kd_x}, kp: {self.kp_x}, robot x:{self.robot_pos['x']},")
         self.get_logger().debug(f"differenz y:{differenz_y}, u_y: {u_y_filtered}, last error {self.last_error_y}, kd: {self.kd_y}, kp: {self.kp_y}, robot y:{self.robot_pos['y']},")
         self.get_logger().debug(f"differenz z:{differenz_z}, u_z: {u_z_filtered}, last error {self.last_error_z}, kd: {self.kd_z}, kp: {self.kp_z}, robot z:{self.robot_pos['z']},")
         
         robot_cmd = RobotCmd()
-        robot_cmd.accel_x = u_x_filtered
-        robot_cmd.accel_y = u_y_filtered
-        robot_cmd.accel_z = u_z_filtered
+        robot_cmd.accel_x = u_x
+        robot_cmd.accel_y = u_y
+        robot_cmd.accel_z = u_z
         robot_cmd.activate_gripper = self.gripper_is_activated
         self.robot_command_pub.publish(robot_cmd)
         self.get_logger().debug('published robot_cmd')
