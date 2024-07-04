@@ -81,7 +81,7 @@ class PickedUp(CustomState):
     def update_state(self):
         if (abs(self.node.target_position['x'] - self.node.robot_pos['x']) < self.node.controlling_tolerance and 
             abs(self.node.target_position['y'] - self.node.robot_pos['y']) < self.node.controlling_tolerance and 
-            (self.node.transport_z + self.node.controlling_tolerance) > self.node.robot_pos['z'] and 
+            abs(self.node.transport_z - self.node.robot_pos['z']) < (2 * self.node.controlling_tolerance)  and 
             self.node.gripper_is_activated and 
             not self.node.user_target):
             self.node.state_machine.transition_to('sorting')
@@ -139,7 +139,7 @@ class regelungs_node(Node):
         self.init_pub = self.create_publisher(Bool, 'init_bool', 10)
         self.robot_pos = {'x': 0, 'y': 0, 'z': 0}
        
-        self.oldest_object = {'x': None, 'y': None, 'class': None, 'timestamp': None, 'index': None, 'sorted' : False}
+        self.oldest_object = {'x': 0, 'y': None, 'class': None, 'timestamp': None, 'index': None, 'sorted' : False}
         self.velocity = 0.0
         self.zero_position = {'x': None, 'y': None, 'z': None}
         self.default_position = {'x': 0.15, 'y': 0.06, 'z': 0.06}
@@ -153,13 +153,13 @@ class regelungs_node(Node):
         self.last_error_z = 0
         #self.kp = 9.85199 
         #self.kd_x = 6.447857
-        self.kp_x = 0.76#0.87
+        self.kp_x = 0.81#0.87
         self.kd_x = 0.62#0.60
         self.kp_y = 0.81#0.87
         self.kd_y = 0.67#0.60
-        self.kp_z = 0.65#0.65
+        self.kp_z = 0.7#0.65
         self.kd_z = 0.4#0.4
-        self.N = 21#30
+        self.N = 50#30
         self.pt2_state_x = [0, 0]
         self.pt2_state_y = [0, 0]
         self.pt2_state_z = [0, 0]
@@ -176,12 +176,12 @@ class regelungs_node(Node):
 
         self.queue = []
 
-        self.box_cat = {'x': 0.0854, 'y': 0.001, 'z': 0.0562} 
-        self.box_unicorn = {'x': 0.0012, 'y': 0.001, 'z': 0.0562} 
+        self.box_cat = {'x': 0.0854, 'y': 0.001, 'z': 0.0462} 
+        self.box_unicorn = {'x': 0.0012, 'y': 0.001, 'z': 0.0462} 
         
           
         
-        self.pick_up_z = 0.079  
+        self.pick_up_z = 0.080  
         self.ready_to_pick_up_z = 0.0714 
         self.transport_z= 0.055
         self.last_msg_time = time.time()
@@ -212,6 +212,11 @@ class regelungs_node(Node):
         self.last_derivative_x = 0
         self.last_derivative_y = 0
         self.last_derivative_z = 0
+        self.last_object_timestamp = time.time()
+        self.last_object_pose = 0
+        self.object_velocity = 0
+        self.weight_measure = 0.8
+        self.weight_velocity_sub = 0.2
         
         self.get_logger().debug(f"state: {self.state_machine.current_state}")
         
@@ -320,17 +325,24 @@ class regelungs_node(Node):
     def object_data_callback(self, msg):
         self.user_target = False
         self.object_data['x'] = (-0.000174 * msg.object_pos_x) + 0.179 
-        self.object_data['y'] = -0.000223*msg.object_pos_y + 0.09  
+        self.object_data['y'] = -0.000223*msg.object_pos_y + 0.1  
         self.object_data['class'] = msg.object_class
         self.object_data['timestamp'] = msg.timestamp_value
         self.object_data['index'] = msg.index_value
+        if(self.state_machine.current_state != self.state_machine.states['idle'] 
+           and self.state_machine.current_state != self.state_machine.states['default']):
+            if abs(self.object_data['x'] - self.oldest_object['x']) < 0.33:
+                return
         for item in self.queue:
             if abs(self.object_data['x'] - item['x']) < 0.33:
                 return
         if(self.object_data['index'] == self.oldest_object['index']):
             self.get_logger().debug(f"updatet oldest object from x: {self.oldest_object['x']} timestamp: {self.oldest_object['timestamp']}")
+            self.last_object_pose = self.oldest_object['x']
+            self.last_object_timestamp = self.oldest_object['timestamp']
             self.oldest_object['x'] = self.object_data['x']
             self.oldest_object['timestamp'] = self.object_data['timestamp']
+            self.object_velocity = (self.oldest_object['x'] - self.last_object_pose) / (self.oldest_object['timestamp'] - self.last_object_timestamp)
             self.get_logger().debug(f"updatet oldest object to x: {self.oldest_object['x']} timestamp: {self.oldest_object['timestamp']}")
 
         if (not any(obj['index'] == self.object_data['index'] for obj in self.queue) 
@@ -349,8 +361,10 @@ class regelungs_node(Node):
     def velocity_callback(self, msg):
         if self.velo_zaehler == 0:
             self.velocity = msg.data * self.velocity_in_coordinates
+            self.object_velocity = self.velocity
         if self.velo_zaehler > 1:
             self.velocity = (self.velocity * self.velo_zaehler + msg.data * self.velocity_in_coordinates) / (self.velo_zaehler + 1)
+            self.velocity = (self.velocity * self.weight_velocity_sub + self.object_velocity * self.weight_measure) / (self.weight_measure + self.weight_velocity_sub)
             self.get_logger().debug(f'velo counter is:: {self.velo_zaehler}')
             self.get_logger().debug(f'raw input velocity is: {msg.data}')
             self.get_logger().debug(f'transformed input velocity is: {msg.data*self.velocity_in_coordinates}')
@@ -364,12 +378,13 @@ class regelungs_node(Node):
             return
         if(self.target_position is None and self.oldest_object is None):
             return
-        if(self.oldest_object is not None):
-            self.get_logger().debug('Start calculating target position')
-            if(self.user_target == True):
+        if(self.user_target == True):
                 self.get_logger().debug(f"user target position is: x={self.target_position['x']}, y={self.target_position['y']}, z={self.target_position['z']}")
                 
-            elif (self.state_machine.current_state == self.state_machine.states['ready_to_pick_up'] 
+        elif(self.oldest_object is not None):
+            self.get_logger().debug('Start calculating target position')
+               
+            if (self.state_machine.current_state == self.state_machine.states['ready_to_pick_up'] 
                 and self.target_position['z'] != self.pick_up_z):
                 self.target_position['z'] = self.pick_up_z 
                 self.get_logger().debug(f'pick up pose is set')
@@ -492,7 +507,18 @@ class regelungs_node(Node):
         self.last_error_z = differenz_z
         
         # PT2 filter 
-        
+        if u_x < -0.3:
+            u_x = -0.3
+        if u_x > 0.3:
+            u_x = 0.3
+        if u_y < -0.3:
+            u_y = -0.3
+        if u_y > 0.3:
+            u_y = 0.3
+        if u_z < -0.3:
+            u_z = -0.3
+        if u_z > 0.3:
+            u_z = 0.3
         
         self.controll_u_x = u_x
         self.controll_u_y = u_y
@@ -533,8 +559,8 @@ class regelungs_node(Node):
             last_state = self.pt2_state_z
     
         # PT2 filter Werte
-        a0 = 0.00732#0.00125
-        a1 = 0.03827
+        a0 = 0.0002 #0.00125
+        a1 = 0.02 #0.05
         a2 = 1
         num = 1
         
@@ -590,9 +616,9 @@ class regelungs_node(Node):
     def emergency_case(self, Fehlermeldung):
         self.state_machine.transition_to('emergency')
         self.get_logger().warn('Warning: ' + Fehlermeldung)
-        self.get_logger().warn('Trying to go to safe position. Keep the surrounding clear')
-        self.move_to_zero_position()
-        time.sleep(30)
+        #self.get_logger().warn('Trying to go to safe position. Keep the surrounding clear')
+        #self.move_to_zero_position()
+        #time.sleep(30)
         self.update_state()
 
      
