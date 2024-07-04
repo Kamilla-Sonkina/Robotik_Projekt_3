@@ -533,8 +533,8 @@ class regelungs_node(Node):
             last_state = self.pt2_state_z
     
         # PT2 filter Werte
-        a0 = 0.00125
-        a1 = 0.05
+        a0 = 0.00732#0.00125
+        a1 = 0.03827
         a2 = 1
         num = 1
         
