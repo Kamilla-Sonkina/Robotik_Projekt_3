@@ -323,6 +323,43 @@ class regelungs_node(Node):
         
 
     def object_data_callback(self, msg):
+        """
+        Process incoming object data and update internal state.
+
+        This method handles incoming messages containing object data. It updates the object's position, class,
+        and timestamp, manages a queue of objects, and calculates object velocity when necessary. It also ensures
+        that the robot's state is taken into account when processing the object data.
+
+        Args:
+            msg: A message object containing the following attributes:
+                object_pos_x (float32): The x-coordinate position of the object.
+                object_pos_y (float32): The y-coordinate position of the object.
+                object_class (string): The class of the object.
+                timestamp_value (float32): The timestamp of the object data.
+                index_value (int32): The index of the object.
+
+        Accesses:
+            self.queue (list): A list of dictionaries containing object data.
+            self.oldest_object (dict): A dictionary containing the object data of the object which is currently processed.
+            self.state_machine (StateMachine): The state machine controlling the robot's state.
+            self.user_target (bool): A flag indicating if the target is set by the user.
+            self.object_data (dict): A dictionary to store the newest object's data.
+            self.black_list_objects (set): A set of blacklisted object indices which where already processed.
+            self.last_object_pose (float): The x-coordinate of the last processed object's position.
+            self.last_object_timestamp (float): The timestamp of the last processed object.
+            self.object_velocity (float): The calculated velocity of the object.
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: If the timestamp value is zero or negative, causing division by zero when calculating velocity.
+
+        Note:
+            This method is designed to be used with a state machine. The object's data is enqueued unless it is
+            already present in the queue, blacklisted, or is the oldest object. If the robot is in an idle or default
+            state, the object is dequeued immediately.
+        """
         self.user_target = False
         self.object_data['x'] = (-0.000174 * msg.object_pos_x) + 0.179 
         self.object_data['y'] = -0.000223*msg.object_pos_y + 0.1  
