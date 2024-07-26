@@ -25,7 +25,7 @@ class TestRobotController(unittest.TestCase):
         self.controller.kd_y = 0.1
         self.controller.kp_z = 1.0
         self.controller.kd_z = 0.1
-        self.controller.N = 10
+        self.controller.N = 20
         self.controller.target_position = {'x': 1, 'y': 1, 'z': 1}
         self.controller.robot_pos = {'x': 0.5, 'y': 0.5, 'z': 0.5}
         self.controller.current_time = 1.0
