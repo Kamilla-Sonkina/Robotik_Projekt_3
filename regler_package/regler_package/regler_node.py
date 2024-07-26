@@ -515,9 +515,12 @@ class regelungs_node(Node):
                 
                 self.target_position['z'] = self.transport_z
             
-            self.regler()        
+            self.regler()   
+            
 
-    
+    """ The regler method uses PD control and filtering to adjust the robot's movement. 
+        It computes position differences, calculates and limits control signals, and publishes them to ensure accurate and stable motion.
+    """
 
     def regler(self):
         self.get_logger().debug(f'target position is: {self.target_position}', throttle_duration_sec=1)
@@ -533,7 +536,7 @@ class regelungs_node(Node):
         
         
         
-        # nur pd regler
+    
         u_x, self.last_derivative_x = self.compute_pd(differenz_x, self.last_error_x, self.last_derivative_x, dt, self.kp_x, self.kd_x, self.N)
         self.last_error_x = differenz_x
         
@@ -543,7 +546,7 @@ class regelungs_node(Node):
         u_z, self.last_derivative_z = self.compute_pd(differenz_z, self.last_error_z, self.last_derivative_z, dt, self.kp_z, self.kd_z, self.N)
         self.last_error_z = differenz_z
         
-        # PT2 filter 
+        # Begrenzung 
         if u_x < -0.3:
             u_x = -0.3
         if u_x > 0.3:
@@ -573,6 +576,7 @@ class regelungs_node(Node):
         self.robot_command_pub.publish(robot_cmd)
         self.get_logger().debug('published robot_cmd')
         self.update_state()
+        
 
     def compute_pd(self, error, last_error, last_derivative, dt, kp, kd, N):
         derivative = (error - last_error) / dt
@@ -586,7 +590,8 @@ class regelungs_node(Node):
         control_signal = float(control_signal)
         
         return control_signal, filtered_derivative
-        
+
+    
     def apply_pt2_filter(self, control_signal, dt, axis):
         if axis == 'x':
             last_state = self.pt2_state_x
@@ -596,12 +601,12 @@ class regelungs_node(Node):
             last_state = self.pt2_state_z
     
         # PT2 filter Werte
-        a0 = 0.0002 #0.00125
-        a1 = 0.02 #0.05
+        a0 = 0.0002 
+        a1 = 0.02 
         a2 = 1
         num = 1
         
-        # implementierung ?
+    
         y = (num * control_signal - a1 * last_state[0] - a0 * last_state[1]) / a2
         
     
