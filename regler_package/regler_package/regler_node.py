@@ -159,7 +159,7 @@ class regelungs_node(Node):
         self.kd_y = 0.67#0.60
         self.kp_z = 0.7#0.65
         self.kd_z = 0.4#0.4
-        self.N = 50#30
+        self.N = 30
         self.pt2_state_x = [0, 0]
         self.pt2_state_y = [0, 0]
         self.pt2_state_z = [0, 0]
