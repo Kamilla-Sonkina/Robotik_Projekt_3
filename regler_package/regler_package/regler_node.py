@@ -228,10 +228,7 @@ class regelungs_node(Node):
         box['z'] -= self.zero_position['z']
         return box
 
-    """
-    move_to_zero_position let the robot go to the corner where switches are placed. It gives a start point for the robot and 
-    defines the coordinate zero point
-    """
+    
 
     def move_to_zero_position(self):
         robot_cmd = RobotCmd()
