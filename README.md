@@ -1,5 +1,24 @@
 # Robotik_Projekt_3
 
+# Initialization and Setup for Objeckdetection
+
+1. **Initialize the Coordinate System:**
+   - The coordinate system must be initialized at the start by updating the pixel coordinates of the origin point (marked on the conveyor belt) in the code.
+   - Once the system starts, the camera must remain stationary to prevent any shift in the coordinate system.
+
+2. **Camera Position:**
+   - Ensure that the camera is fixed and does not move after the system starts, as any movement will cause the coordinate system to shift.
+
+3. **Aruco Marker:**
+   - An Aruco marker is used for perspective transformation. Ensure that the marker is fully visible in the image for accurate transformation.
+
+4. **YOLO Model Integration:**
+   - Integrate the YOLO model into the system for object detection. Ensure the model is properly loaded and configured within the code.
+
+By following these steps, you will set up the system correctly for accurate object tracking and coordinate mapping.
+
+
+
 ## Install:
 
 Download the regler_package, the object_tracker_package, the object_interfaces, target_interfaces, the ro45_portalrobot_interfaces, the ro45_ros2_pickrobot_serial, the watchdog and rviz in your source folder in your ros2 workspace. 
