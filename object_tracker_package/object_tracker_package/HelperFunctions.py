@@ -1,6 +1,8 @@
-# Helper Functions
-def pixel_to_cm(pixel, marker_size):
-    return (pixel / 40)  # Marker eig. 2.01, 5.2 / marker_size
+# speed_faktor entspricht anzahl pixel auf dem Frame pro cm in echt
+speed_faktor = 37.5
 
+def pixel_to_cm(pixel, marker_size):
+    
+    return (pixel / speed_faktor) 
 #def cm_to_pixel(cm, marker_size):
-    return cm / (6.4 * marker_size)
+    return cm / speed_faktor
